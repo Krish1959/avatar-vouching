@@ -1,1 +1,524 @@
-#HTML file
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Avatar Agentic AI, Singapore — Avatar Vouching Agentic AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="favicon.png">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --gold:#FFD700;--gold-dim:rgba(255,215,0,.35);--gold-faint:rgba(255,215,0,.12);
+  --brown-deep:#2a1810;--brown-dark:#3d2314;--brown-mid:#5c3a2d;--brown-light:#7a4f3a;
+  --cream:#F7EDD8;--cream-dark:#E8D4A8;--text:#3a2010;--white:#fff;--err:#a3271b;--ok:#2f6b2f;
+}
+body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#f0e8d8;color:var(--text)}
+
+/* HEADER (same glitter as corporate site) */
+.header{background:linear-gradient(135deg,#3d2314 0%,#5c3a2d 25%,#3d2314 50%,#5c3a2d 75%,#3d2314 100%);
+  background-size:400% 400%;animation:glitter 3s ease-in-out infinite;padding:44px 20px 36px;text-align:center;position:relative;overflow:hidden}
+.header::before{content:'';position:absolute;top:0;left:-100%;width:200%;height:100%;
+  background:linear-gradient(90deg,transparent 0%,rgba(255,215,0,.1) 25%,rgba(255,215,0,.3) 50%,rgba(255,215,0,.1) 75%,transparent 100%);animation:shimmer 2.5s infinite}
+@keyframes glitter{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+@keyframes shimmer{0%{transform:translateX(-50%)}100%{transform:translateX(50%)}}
+.header h1{color:var(--gold);font-family:'Playfair Display',serif;font-size:3rem;font-weight:700;letter-spacing:2px;position:relative;z-index:1;margin-bottom:8px;
+  text-shadow:0 0 10px rgba(255,215,0,.5),0 0 20px rgba(255,215,0,.3),0 0 40px rgba(255,215,0,.15),2px 2px 4px rgba(0,0,0,.5)}
+.header h2{color:var(--gold);font-size:1.15rem;font-weight:400;letter-spacing:5px;text-transform:uppercase;position:relative;z-index:1;
+  text-shadow:0 0 8px rgba(255,215,0,.4),1px 1px 3px rgba(0,0,0,.5)}
+
+/* MARQUEE (retained) */
+.marquee-container{background:linear-gradient(90deg,#2a1810 0%,#4a2c20 50%,#2a1810 100%);overflow:hidden;position:relative;
+  border-top:2px solid rgba(255,215,0,.3);border-bottom:2px solid rgba(255,215,0,.3)}
+.marquee-container::before,.marquee-container::after{content:'';position:absolute;top:0;width:100px;height:100%;z-index:2;pointer-events:none}
+.marquee-container::before{left:0;background:linear-gradient(90deg,#2a1810 0%,transparent 100%)}
+.marquee-container::after{right:0;background:linear-gradient(90deg,transparent 0%,#2a1810 100%)}
+.marquee-track{display:flex;width:max-content;animation:scroll 25s linear infinite}
+.marquee-track:hover{animation-play-state:paused}
+@keyframes scroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.marquee-content{display:flex;align-items:center;padding:18px 0;white-space:nowrap}
+.marquee-text{color:var(--gold);font-size:1.1rem;font-weight:500;letter-spacing:1px;padding:0 30px;text-shadow:0 0 10px rgba(255,215,0,.4),0 0 20px rgba(255,215,0,.2)}
+.marquee-icon{color:var(--gold);font-size:1.4rem;opacity:.8;animation:sparkle 1.5s ease-in-out infinite}
+.marquee-icon:nth-child(odd){animation-delay:.75s}
+@keyframes sparkle{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.2)}}
+.gold-divider{height:3px;background:linear-gradient(90deg,transparent 0%,rgba(255,215,0,.3) 20%,rgba(255,215,0,.8) 50%,rgba(255,215,0,.3) 80%,transparent 100%)}
+
+/* GRID */
+.main-grid{display:grid;grid-template-columns:repeat(12,1fr);max-width:1400px;margin:0 auto;padding:36px 24px 40px;align-items:start}
+.content-panel{grid-column:1/9;padding-right:40px}
+.side-panel{grid-column:9/13;display:flex;flex-direction:column;gap:20px;position:sticky;top:20px}
+
+.hero-sub{font-size:.95rem;color:var(--brown-mid);font-weight:500;letter-spacing:2px;text-transform:uppercase;padding-left:20px;margin-bottom:6px}
+.hero-headline{font-family:'Playfair Display',serif;font-size:2rem;font-weight:700;color:var(--brown-dark);line-height:1.25;margin-bottom:22px;border-left:4px solid var(--gold);padding-left:16px}
+
+/* STEPPER */
+.steps{display:flex;gap:10px;margin-bottom:20px}
+.step{flex:1;display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--white);border-radius:8px;box-shadow:0 1px 4px rgba(61,35,20,.08);font-size:.88rem;color:#8a6a55}
+.step .n{width:26px;height:26px;min-width:26px;border-radius:50%;display:grid;place-items:center;background:var(--cream-dark);color:var(--brown-dark);font-weight:700;font-size:.85rem}
+.step.active{color:var(--brown-dark);font-weight:600;border-left:3px solid var(--gold)}
+.step.active .n{background:var(--brown-dark);color:var(--gold)}
+.step.done .n{background:var(--gold);color:var(--brown-dark)}
+
+/* CARD + FORM */
+.card{background:var(--white);border-radius:14px;box-shadow:0 6px 30px rgba(61,35,20,.12);overflow:hidden}
+.card-head{background:linear-gradient(135deg,var(--brown-dark) 0%,var(--brown-mid) 100%);padding:16px 26px;position:relative;display:flex;align-items:center;gap:12px}
+.card-head::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,var(--gold),transparent)}
+.badge{background:var(--gold);color:var(--brown-dark);font-size:.6rem;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;padding:4px 12px;border-radius:20px}
+.card-head h3{font-family:'Playfair Display',serif;color:var(--gold);font-size:1.2rem;font-weight:600}
+.card-body{padding:26px;background:#faf6ee}
+
+.field{margin-bottom:18px}
+.field label{display:block;font-weight:600;color:var(--brown-dark);margin-bottom:6px;font-size:.95rem}
+.field label .opt{font-weight:400;color:#8a6a55;font-size:.8rem}
+.field input[type=text],.field input[type=email],.field input[type=url],.field textarea{
+  width:100%;padding:12px 14px;border:1px solid var(--cream-dark);border-radius:8px;font:inherit;font-size:.97rem;background:var(--white);color:var(--text);transition:border .2s,box-shadow .2s}
+.field textarea{min-height:70px;resize:vertical}
+.field input:focus,.field textarea:focus{outline:none;border-color:var(--brown-light);box-shadow:0 0 0 3px var(--gold-faint)}
+.hint{font-size:.8rem;color:#7a5a45;margin-top:5px}
+.hint code{background:var(--cream);padding:1px 6px;border-radius:4px;color:var(--brown-dark);font-weight:600}
+
+.path-preview{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 14px;background:rgba(255,215,0,.08);border-left:3px solid var(--gold-dim);border-radius:0 8px 8px 0;font-size:.88rem;margin:4px 0 20px}
+.path-preview .seg{background:var(--white);border:1px solid var(--cream-dark);padding:2px 8px;border-radius:5px;font-weight:600;color:var(--brown-dark)}
+
+.btn{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,var(--brown-dark),var(--brown-mid));color:var(--gold);border:0;border-radius:8px;
+  padding:13px 30px;font:inherit;font-weight:600;font-size:1rem;letter-spacing:1px;cursor:pointer;box-shadow:0 3px 12px rgba(61,35,20,.25);transition:transform .1s,box-shadow .2s}
+.btn:hover{box-shadow:0 5px 18px rgba(61,35,20,.35)}
+.btn:active{transform:translateY(1px)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.link-btn{background:none;border:0;color:var(--brown-mid);text-decoration:underline;cursor:pointer;font:inherit;font-size:.85rem}
+.link-btn:disabled{color:#b0a090;text-decoration:none;cursor:default}
+
+.msg{margin-top:14px;font-size:.9rem;min-height:1.2em}
+.msg.err{color:var(--err)} .msg.ok{color:var(--ok)}
+
+.verified{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.88rem;padding:10px 14px;background:var(--cream);border-radius:8px;margin-bottom:20px}
+.verified b{color:var(--brown-dark)}
+
+/* DROP ZONES */
+.drop{border:2px dashed var(--cream-dark);border-radius:10px;background:var(--white);padding:22px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s}
+.drop:hover,.drop.over{border-color:var(--gold);background:#fffbef}
+.drop .ico{font-size:1.8rem}
+.drop p{font-size:.92rem;color:#5a3a25;margin-top:4px}
+.drop p u{color:var(--brown-dark);font-weight:600}
+.drop small{color:#8a6a55;font-size:.78rem}
+.drop input{display:none}
+.files{list-style:none;margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.files li{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--white);border-left:3px solid var(--gold);border-radius:6px;padding:7px 12px;font-size:.86rem;box-shadow:0 1px 3px rgba(61,35,20,.06)}
+.files li span.sz{color:#8a6a55;font-size:.78rem;white-space:nowrap}
+.files li button{background:none;border:0;color:var(--err);cursor:pointer;font-size:1rem;line-height:1}
+
+.or{display:flex;align-items:center;gap:12px;margin:22px 0 16px;color:#8a6a55;font-size:.8rem;letter-spacing:2px;text-transform:uppercase}
+.or::before,.or::after{content:'';flex:1;height:1px;background:var(--cream-dark)}
+
+.progress{height:8px;background:var(--cream-dark);border-radius:6px;overflow:hidden;margin-top:14px;display:none}
+.progress div{height:100%;width:0;background:linear-gradient(90deg,var(--gold),#e0b400);transition:width .2s}
+
+.success{text-align:center;padding:10px 0}
+.success .big{font-size:2.6rem}
+.success h4{font-family:'Playfair Display',serif;color:var(--brown-dark);font-size:1.4rem;margin:8px 0}
+.success .ref{display:inline-block;font-size:1.3rem;letter-spacing:3px;font-weight:700;color:var(--brown-dark);background:var(--cream);padding:6px 16px;border-radius:8px;margin:10px 0}
+.success p{font-size:.92rem;line-height:1.7}
+
+/* SIDE BOXES */
+.instructions-box{background:var(--cream-dark);border-radius:12px;padding:20px 22px;border-left:4px solid var(--brown-mid)}
+.inst-title{font-family:'Playfair Display',serif;font-size:1rem;font-weight:700;color:var(--brown-dark);margin-bottom:12px}
+.instructions-box ol,.instructions-box ul{padding-left:18px;display:flex;flex-direction:column;gap:8px}
+.instructions-box li{font-size:.88rem;line-height:1.55}
+.instructions-box li strong{color:var(--brown-dark)}
+.inst-note{font-size:.8rem;color:#6b4a35;font-style:italic;padding-top:10px;margin-top:12px;border-top:1px solid rgba(0,0,0,.1);line-height:1.5}
+.reco-box{background:linear-gradient(135deg,var(--brown-dark) 0%,var(--brown-mid) 100%);border-radius:12px;padding:20px 22px;color:var(--cream)}
+.reco-box .inst-title{color:var(--gold)}
+.reco-box li{font-size:.86rem;line-height:1.55}
+.reco-box code{color:var(--gold);font-weight:600}
+.contact{font-size:.85rem;line-height:1.7}
+.contact a{color:var(--brown-dark);font-weight:600}
+
+/* MODAL */
+.modal{position:fixed;inset:0;background:rgba(26,15,8,.65);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+.modal.open{display:flex}
+.modal-box{background:var(--white);border-radius:14px;max-width:440px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4);animation:pop .2s ease-out}
+@keyframes pop{from{transform:scale(.95);opacity:0}to{transform:scale(1);opacity:1}}
+.modal-box .card-body{text-align:center}
+.otp{display:flex;justify-content:center;gap:8px;margin:18px 0 6px}
+.otp input{width:46px;height:56px;text-align:center;font-size:1.6rem;font-weight:700;border:1px solid var(--cream-dark);border-radius:8px;color:var(--brown-dark);background:var(--white)}
+.otp input:focus{outline:none;border-color:var(--brown-light);box-shadow:0 0 0 3px var(--gold-faint)}
+.modal-actions{display:flex;justify-content:space-between;align-items:center;margin-top:18px}
+
+.footer{background:var(--brown-deep);text-align:center;padding:18px;color:rgba(255,215,0,.5);font-size:.78rem;letter-spacing:1.5px}
+.hidden{display:none!important}
+
+@media (max-width:900px){
+  .header{padding:28px 20px 22px}.header h1{font-size:2.1rem}.header h2{font-size:1rem}
+  .main-grid{display:flex;flex-direction:column;gap:20px;padding:20px 16px 32px}
+  .content-panel,.side-panel{width:100%;padding-right:0;position:static}
+  .hero-headline{font-size:1.45rem}
+  .marquee-text{font-size:1rem}.marquee-container::before,.marquee-container::after{width:40px}
+}
+@media (max-width:480px){
+  .header{padding:22px 16px 18px}.header h1{font-size:1.6rem;letter-spacing:1px}.header h2{font-size:.78rem;letter-spacing:2.5px}
+  .main-grid{padding:16px 12px 28px}
+  .steps{gap:6px}.step{padding:8px;font-size:0}.step .n{font-size:.85rem}
+  .card-body{padding:18px}
+  .otp input{width:40px;height:50px;font-size:1.3rem}
+  .btn{width:100%;justify-content:center}
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <h1>Avatar Agentic AI, Singapore</h1>
+  <h2>Avatar Vouching Agentic AI</h2>
+</header>
+
+<div class="marquee-container">
+  <div class="marquee-track">
+    <div class="marquee-content">
+      <span class="marquee-icon">✦</span><span class="marquee-text">We empower your workforce with advanced agentic AI capabilities to lead your enterprise into Industry 4.0.</span>
+      <span class="marquee-icon">◆</span><span class="marquee-text">Autonomous agent swarms that orchestrate end-to-end daily operations with unprecedented precision.</span>
+      <span class="marquee-icon">✦</span><span class="marquee-text">Enterprise-grade AI governance with Human-in-the-Loop controls — trust, transparency, and total control.</span>
+      <span class="marquee-icon">◆</span><span class="marquee-text">Omnichannel agentic access via WhatsApp, Email, and Web portals — your AI workforce, always on.</span>
+    </div>
+    <div class="marquee-content" aria-hidden="true">
+      <span class="marquee-icon">✦</span><span class="marquee-text">We empower your workforce with advanced agentic AI capabilities to lead your enterprise into Industry 4.0.</span>
+      <span class="marquee-icon">◆</span><span class="marquee-text">Autonomous agent swarms that orchestrate end-to-end daily operations with unprecedented precision.</span>
+      <span class="marquee-icon">✦</span><span class="marquee-text">Enterprise-grade AI governance with Human-in-the-Loop controls — trust, transparency, and total control.</span>
+      <span class="marquee-icon">◆</span><span class="marquee-text">Omnichannel agentic access via WhatsApp, Email, and Web portals — your AI workforce, always on.</span>
+    </div>
+  </div>
+</div>
+<div class="gold-divider"></div>
+
+<main class="main-grid">
+  <div class="content-panel">
+    <p class="hero-sub">Audit Vouching · Full Ledger Coverage</p>
+    <h2 class="hero-headline">Submit Your Vouching Data Set</h2>
+
+    <div class="steps">
+      <div class="step active" id="st1"><span class="n">1</span>Company details</div>
+      <div class="step" id="st2"><span class="n">2</span>Verify email</div>
+      <div class="step" id="st3"><span class="n">3</span>Upload files</div>
+    </div>
+
+    <!-- STEP 1 -->
+    <section class="card" id="step1">
+      <div class="card-head"><span class="badge">Step 1</span><h3>Company Details</h3></div>
+      <form class="card-body" id="detailsForm" novalidate>
+        <div class="field">
+          <label for="acc">Accounting Company</label>
+          <input type="text" id="acc" maxlength="120" placeholder="e.g. SPN Management Consultants" required autocomplete="organization">
+        </div>
+        <div class="field">
+          <label for="cust">Customer Company</label>
+          <input type="text" id="cust" maxlength="120" placeholder="e.g. Continental Electronics Pte Ltd" required>
+        </div>
+        <div class="path-preview" id="pathPreview">
+          📁 <span class="seg">Vouching</span> › <span class="seg" id="pvAcc">…</span> › <span class="seg" id="pvCust">…</span>
+        </div>
+        <div class="field">
+          <label for="email">Email</label>
+          <input type="email" id="email" maxlength="254" placeholder="you@company.com" required autocomplete="email">
+          <p class="hint">A 6-digit confirmation code will be sent to this address.</p>
+        </div>
+        <button class="btn" type="submit" id="sendBtn">Submit</button>
+        <p class="msg" id="msg1" role="alert"></p>
+      </form>
+    </section>
+
+    <!-- STEP 3 -->
+    <section class="card hidden" id="step3">
+      <div class="card-head"><span class="badge">Step 3</span><h3>Upload Data Set</h3></div>
+      <form class="card-body" id="uploadForm" novalidate>
+        <div class="verified" id="verifiedInfo"></div>
+
+        <div class="field">
+          <label>Ledger Files</label>
+          <div class="drop" data-target="ledger" tabindex="0">
+            <div class="ico">📊</div>
+            <p>Drag &amp; drop files here, or <u>browse</u></p>
+            <small>Excel, CSV, PDF, ZIP · up to <span class="maxmb">100</span> MB each</small>
+            <input type="file" id="ledgerInput" multiple accept=".xlsx,.xls,.xlsm,.csv,.pdf,.zip,.txt,.json,.xml">
+          </div>
+          <ul class="files" id="ledgerList"></ul>
+        </div>
+
+        <div class="field">
+          <label>Output Format Sample <span class="opt">* Optional</span></label>
+          <div class="drop" data-target="sample" tabindex="0">
+            <div class="ico">📄</div>
+            <p>Drag &amp; drop a sample report, or <u>browse</u></p>
+            <small>Show us the layout you want the vouching output in</small>
+            <input type="file" id="sampleInput" multiple accept=".xlsx,.xls,.xlsm,.csv,.pdf,.docx,.doc">
+          </div>
+          <ul class="files" id="sampleList"></ul>
+        </div>
+
+        <div class="or">or / also</div>
+
+        <div class="field">
+          <label for="driveLink">Shared Folder Link <span class="opt">Optional — recommended for large sets</span></label>
+          <input type="url" id="driveLink" maxlength="500" placeholder="https://drive.google.com/drive/folders/…">
+          <p class="hint">Share the folder with <code>agentic.avai@gmail.com</code> (Viewer) or set “Anyone with the link”. We copy every file automatically.</p>
+        </div>
+
+        <div class="field">
+          <label for="notes">Notes <span class="opt">Optional</span></label>
+          <textarea id="notes" maxlength="2000" placeholder="Financial year, materiality, special instructions…"></textarea>
+        </div>
+
+        <button class="btn" type="submit" id="uploadBtn">Submit</button>
+        <div class="progress" id="progress"><div></div></div>
+        <p class="msg" id="msg3" role="alert"></p>
+      </form>
+    </section>
+
+    <!-- DONE -->
+    <section class="card hidden" id="stepDone">
+      <div class="card-head"><span class="badge">Done</span><h3>Submission Received</h3></div>
+      <div class="card-body success">
+        <div class="big">✅</div>
+        <h4>Thank you — your files are in safe hands.</h4>
+        <div class="ref" id="doneRef"></div>
+        <p id="doneSummary"></p>
+        <p style="margin-top:14px"><button class="link-btn" id="againBtn">Submit another data set</button></p>
+      </div>
+    </section>
+  </div>
+
+  <aside class="side-panel">
+    <div class="instructions-box">
+      <p class="inst-title">📋 How it works</p>
+      <ol>
+        <li>Enter the <strong>Accounting</strong> and <strong>Customer</strong> company names and your email.</li>
+        <li>Enter the <strong>6-digit code</strong> we email you.</li>
+        <li>Upload <strong>ledger files</strong> and, optionally, an <strong>output format sample</strong>.</li>
+        <li>You receive a <strong>reference number</strong> by email.</li>
+      </ol>
+      <p class="inst-note">🔒 Files are stored privately in AVAG.AI's secure Google Drive and used only for your vouching engagement.</p>
+    </div>
+
+    <div class="reco-box">
+      <p class="inst-title">⭐ Large data sets? Share a link</p>
+      <ul>
+        <li>Put all files in one folder in <strong>your own Google Drive</strong>.</li>
+        <li>Share it with <code>agentic.avai@gmail.com</code> (Viewer).</li>
+        <li>Paste the folder link in Step 3 — we copy the whole set, sub-folders included.</li>
+        <li>OneDrive / Dropbox links are accepted and retrieved manually.</li>
+      </ul>
+    </div>
+
+    <div class="instructions-box contact">
+      <p class="inst-title">📞 Need help?</p>
+      Krish Ambady<br>
+      WhatsApp: <a href="https://wa.me/6597890305">+65 9789 0305</a><br>
+      Email: <a href="mailto:Agentic.AvAI@gmail.com">Agentic.AvAI@gmail.com</a>
+    </div>
+  </aside>
+</main>
+
+<!-- STEP 2: CODE POP-UP -->
+<div class="modal" id="codeModal" role="dialog" aria-modal="true" aria-labelledby="codeTitle">
+  <div class="modal-box">
+    <div class="card-head"><span class="badge">Step 2</span><h3 id="codeTitle">Confirmation Code</h3></div>
+    <form class="card-body" id="codeForm" novalidate>
+      <p style="font-size:.92rem">We sent a 6-digit code to <b id="maskedEmail"></b></p>
+      <div class="otp" id="otp">
+        <input inputmode="numeric" maxlength="1" aria-label="Digit 1"><input inputmode="numeric" maxlength="1" aria-label="Digit 2">
+        <input inputmode="numeric" maxlength="1" aria-label="Digit 3"><input inputmode="numeric" maxlength="1" aria-label="Digit 4">
+        <input inputmode="numeric" maxlength="1" aria-label="Digit 5"><input inputmode="numeric" maxlength="1" aria-label="Digit 6">
+      </div>
+      <p class="hint">Code expires in 10 minutes. Check your spam folder.</p>
+      <p class="msg" id="msg2" role="alert"></p>
+      <div class="modal-actions">
+        <button type="button" class="link-btn" id="cancelBtn">Change details</button>
+        <button type="button" class="link-btn" id="resendBtn" disabled>Resend (60)</button>
+      </div>
+      <button class="btn" type="submit" id="verifyBtn" style="margin-top:16px;width:100%;justify-content:center">Verify</button>
+    </form>
+  </div>
+</div>
+
+<footer class="footer">© 2026 Avatar Agentic AI Pte Ltd · Singapore · All Rights Reserved</footer>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const MAX_MB = 100;
+  document.querySelectorAll('.maxmb').forEach((e) => (e.textContent = MAX_MB));
+
+  const state = { requestId: null, token: null, session: null, files: { ledger: [], sample: [] } };
+
+  /* folder-key preview: mirrors server folderKey() */
+  const key = (s) => {
+    const w = s.normalize('NFKD').replace(/[^\w\s&-]/g, ' ').trim().split(/\s+/).filter((x) => x && !/^the$/i.test(x));
+    return ((w[0] || '').replace(/[^A-Za-z0-9&-]/g, '').toUpperCase().slice(0, 40)) || '…';
+  };
+  const updatePreview = () => { $('pvAcc').textContent = key($('acc').value); $('pvCust').textContent = key($('cust').value); };
+  $('acc').addEventListener('input', updatePreview);
+  $('cust').addEventListener('input', updatePreview);
+
+  const setMsg = (el, text, ok) => { el.textContent = text || ''; el.className = 'msg ' + (ok ? 'ok' : 'err'); };
+  const setStep = (n) => [1, 2, 3].forEach((i) => {
+    $('st' + i).classList.toggle('active', i === n);
+    $('st' + i).classList.toggle('done', i < n);
+  });
+  async function api(url, body) {
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || 'Something went wrong.');
+    return data;
+  }
+
+  /* ---------- STEP 1 ---------- */
+  let resendTimer;
+  async function requestCode() {
+    const body = { accountingCompany: $('acc').value.trim(), customerCompany: $('cust').value.trim(), email: $('email').value.trim() };
+    if (!body.accountingCompany || !body.customerCompany) throw new Error('Please enter both company names.');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(body.email)) throw new Error('Please enter a valid email address.');
+    const d = await api('/api/request-code', body);
+    state.requestId = d.requestId;
+    $('maskedEmail').textContent = d.maskedEmail;
+    startResendCountdown();
+  }
+  function startResendCountdown() {
+    let s = 60; const b = $('resendBtn'); b.disabled = true; b.textContent = `Resend (${s})`;
+    clearInterval(resendTimer);
+    resendTimer = setInterval(() => { s--; b.textContent = s > 0 ? `Resend (${s})` : 'Resend code'; if (s <= 0) { b.disabled = false; clearInterval(resendTimer); } }, 1000);
+  }
+
+  $('detailsForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = $('sendBtn'); btn.disabled = true; btn.textContent = 'Sending…'; setMsg($('msg1'), '');
+    try { await requestCode(); openModal(); }
+    catch (err) { setMsg($('msg1'), err.message); }
+    finally { btn.disabled = false; btn.textContent = 'Submit'; }
+  });
+
+  /* ---------- STEP 2 (modal) ---------- */
+  const otp = [...$('otp').querySelectorAll('input')];
+  function openModal() { otp.forEach((i) => (i.value = '')); setMsg($('msg2'), ''); $('codeModal').classList.add('open'); setStep(2); setTimeout(() => otp[0].focus(), 50); }
+  function closeModal() { $('codeModal').classList.remove('open'); setStep(1); }
+  otp.forEach((inp, i) => {
+    inp.addEventListener('input', () => {
+      inp.value = inp.value.replace(/\D/g, '').slice(-1);
+      if (inp.value && i < 5) otp[i + 1].focus();
+      if (otp.every((x) => x.value)) $('codeForm').requestSubmit();
+    });
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Backspace' && !inp.value && i > 0) otp[i - 1].focus(); });
+    inp.addEventListener('paste', (e) => {
+      const digits = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
+      if (!digits) return; e.preventDefault();
+      digits.split('').forEach((d, k) => { if (otp[k]) otp[k].value = d; });
+      otp[Math.min(digits.length, 5)].focus();
+      if (digits.length === 6) $('codeForm').requestSubmit();
+    });
+  });
+  $('cancelBtn').addEventListener('click', closeModal);
+  $('resendBtn').addEventListener('click', async () => {
+    try { await requestCode(); setMsg($('msg2'), 'A new code has been sent.', true); }
+    catch (err) { setMsg($('msg2'), err.message); }
+  });
+  $('codeForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const code = otp.map((x) => x.value).join('');
+    if (code.length !== 6) return setMsg($('msg2'), 'Enter all 6 digits.');
+    const btn = $('verifyBtn'); btn.disabled = true; btn.textContent = 'Checking…';
+    try {
+      const d = await api('/api/verify-code', { requestId: state.requestId, code });
+      state.token = d.token; state.session = d;
+      $('codeModal').classList.remove('open');
+      showUpload();
+    } catch (err) { setMsg($('msg2'), err.message); otp.forEach((x) => (x.value = '')); otp[0].focus(); }
+    finally { btn.disabled = false; btn.textContent = 'Verify'; }
+  });
+
+  /* ---------- STEP 3 ---------- */
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  function showUpload() {
+    const s = state.session;
+    $('verifiedInfo').innerHTML =
+      `<span>✔ <b>${esc(s.email)}</b></span><span>📁 Vouching › <b>${esc(s.accKey)}</b> › <b>${esc(s.custKey)}</b></span>`;
+    $('step1').classList.add('hidden'); $('step3').classList.remove('hidden'); setStep(3);
+    $('step3').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  const fmt = (b) => (b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
+
+  function addFiles(target, list) {
+    const bucket = state.files[target];
+    for (const f of list) {
+      if (f.size > MAX_MB * 1048576) { setMsg($('msg3'), `${f.name} is over ${MAX_MB} MB — use the shared-link option instead.`); continue; }
+      if (!bucket.some((x) => x.name === f.name && x.size === f.size)) bucket.push(f);
+    }
+    render(target);
+  }
+  function render(target) {
+    const ul = $(target + 'List');
+    ul.innerHTML = state.files[target].map((f, i) =>
+      `<li><span>${esc(f.name)}</span><span><span class="sz">${fmt(f.size)}</span> <button type="button" data-t="${target}" data-i="${i}" aria-label="Remove">✕</button></span></li>`).join('');
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('.files button'); if (!b) return;
+    state.files[b.dataset.t].splice(+b.dataset.i, 1); render(b.dataset.t);
+  });
+
+  document.querySelectorAll('.drop').forEach((zone) => {
+    const target = zone.dataset.target, input = zone.querySelector('input');
+    zone.addEventListener('click', () => input.click());
+    zone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
+    input.addEventListener('change', () => { addFiles(target, input.files); input.value = ''; });
+    ['dragenter', 'dragover'].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add('over'); }));
+    ['dragleave', 'drop'].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.remove('over'); }));
+    zone.addEventListener('drop', (e) => addFiles(target, e.dataTransfer.files));
+  });
+
+  $('uploadForm').addEventListener('submit', (e) => {
+    e.preventDefault(); setMsg($('msg3'), '');
+    const link = $('driveLink').value.trim();
+    if (!state.files.ledger.length && !link) return setMsg($('msg3'), 'Add at least one ledger file, or paste a shared folder link.');
+    if (link && !/^https:\/\//i.test(link)) return setMsg($('msg3'), 'The shared link must start with https://');
+
+    const fd = new FormData();
+    fd.append('token', state.token);
+    fd.append('driveLink', link);
+    fd.append('notes', $('notes').value.trim());
+    state.files.ledger.forEach((f) => fd.append('ledger', f, f.name));
+    state.files.sample.forEach((f) => fd.append('sample', f, f.name));
+
+    const btn = $('uploadBtn'), bar = $('progress'), fill = bar.firstElementChild;
+    btn.disabled = true; btn.textContent = 'Uploading…'; bar.style.display = 'block'; fill.style.width = '0';
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/upload');
+    xhr.upload.onprogress = (ev) => {
+      if (!ev.lengthComputable) return;
+      const p = Math.round((ev.loaded / ev.total) * 100);
+      fill.style.width = p + '%';
+      if (p === 100) btn.textContent = link ? 'Saving & copying linked files…' : 'Saving to secure storage…';
+    };
+    xhr.onload = () => {
+      let d = {}; try { d = JSON.parse(xhr.responseText); } catch {}
+      btn.disabled = false; btn.textContent = 'Submit'; bar.style.display = 'none';
+      if (xhr.status !== 200) return setMsg($('msg3'), d.error || 'Upload failed. Please try again.');
+      $('doneRef').textContent = d.reference;
+      $('doneSummary').innerHTML =
+        `${d.ledgerCount} ledger file(s) · ${d.sampleCount} output sample(s)` +
+        (link ? ` · ${d.linkCopied} file(s) copied from your link${d.linkFailed ? ` (${d.linkFailed} need follow-up)` : ''}` : '') +
+        `<br>A confirmation has been emailed to <b>${esc(state.session.email)}</b>.`;
+      $('step3').classList.add('hidden'); $('stepDone').classList.remove('hidden');
+      [1, 2, 3].forEach((i) => { $('st' + i).classList.remove('active'); $('st' + i).classList.add('done'); });
+    };
+    xhr.onerror = () => { btn.disabled = false; btn.textContent = 'Submit'; bar.style.display = 'none'; setMsg($('msg3'), 'Network error. Please try again.'); };
+    xhr.send(fd);
+  });
+
+  $('againBtn').addEventListener('click', () => {
+    state.files = { ledger: [], sample: [] }; render('ledger'); render('sample');
+    $('driveLink').value = ''; $('notes').value = '';
+    $('stepDone').classList.add('hidden'); $('step3').classList.remove('hidden'); setStep(3);
+  });
+
+  updatePreview();
+})();
+</script>
+</body>
+</html>
