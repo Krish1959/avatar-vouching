@@ -1,0 +1,20 @@
+{
+  "name": "avag-vouching-intake",
+  "version": "1.0.0",
+  "description": "Avatar Vouching Agentic AI — data-file intake (email verification + Google Drive storage)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "DEV_MODE=true node server.js",
+    "token": "node get-refresh-token.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "googleapis": "^144.0.0",
+    "multer": "^1.4.5-lts.1"
+  }
+}
