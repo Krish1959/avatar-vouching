@@ -1,3 +1,5 @@
+// Version :011126 11:30
+// File    :server.js
 /**
  * Avatar Vouching Agentic AI — intake service
  *
@@ -18,6 +20,7 @@ const rateLimit = require('express-rate-limit');
 const g = require('./lib/google');
 const { avatarVouching } = require('./lib/avatar-vouching');
 
+const VERSION = '011126 11:30';
 const PORT = process.env.PORT || 3000;
 const ROOT_FOLDER = process.env.ROOT_FOLDER_NAME || 'Vouching';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'agentic.avai@gmail.com';
@@ -285,10 +288,10 @@ app.post('/api/upload', (req, res) => {
 
 if (!g.DEV) require('./lib/connect').mount(app);
 
-app.get('/healthz', (_req, res) => res.json({ ok: true, dev: g.DEV }));
+app.get('/healthz', (_req, res) => res.json({ ok: true, version: VERSION, dev: g.DEV }));
 app.get('/healthz/google', rateLimit({ windowMs: 60 * 1000, max: 10 }), async (_req, res) => res.json(await g.diagnose()));
 
 if (require.main === module) {
-  app.listen(PORT, () => console.log(`AVAG.AI vouching intake on :${PORT}${g.DEV ? ' (DEV_MODE)' : ''}`));
+  app.listen(PORT, () => console.log(`AVAG.AI vouching intake v${VERSION} on :${PORT}${g.DEV ? ' (DEV_MODE)' : ''}`));
 }
 module.exports = { app, folderKey };

@@ -1,3 +1,4 @@
+<!-- Version :011126 11:30 -->
 # Avatar Vouching Agentic AI — Intake
 
 Branded intake page → 6-digit email code → file upload → Google Drive (`agentic.avai@gmail.com`) → `avatarVouching()`.
