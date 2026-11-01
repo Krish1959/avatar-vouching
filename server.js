@@ -283,6 +283,8 @@ app.post('/api/upload', (req, res) => {
   });
 });
 
+if (!g.DEV) require('./lib/connect').mount(app);
+
 app.get('/healthz', (_req, res) => res.json({ ok: true, dev: g.DEV }));
 app.get('/healthz/google', rateLimit({ windowMs: 60 * 1000, max: 10 }), async (_req, res) => res.json(await g.diagnose()));
 
