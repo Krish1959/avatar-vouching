@@ -284,6 +284,7 @@ app.post('/api/upload', (req, res) => {
 });
 
 app.get('/healthz', (_req, res) => res.json({ ok: true, dev: g.DEV }));
+app.get('/healthz/google', rateLimit({ windowMs: 60 * 1000, max: 10 }), async (_req, res) => res.json(await g.diagnose()));
 
 if (require.main === module) {
   app.listen(PORT, () => console.log(`AVAG.AI vouching intake on :${PORT}${g.DEV ? ' (DEV_MODE)' : ''}`));
