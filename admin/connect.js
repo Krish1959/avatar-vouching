@@ -1,1 +1,1 @@
-# JS file
+// JS file
