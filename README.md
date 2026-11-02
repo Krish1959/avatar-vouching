@@ -1,52 +1,84 @@
-<!-- Version :011126 11:30 -->
-# Avatar Vouching Agentic AI — Intake
+<!-- Version :021126 14:50 -->
+# Avatar Vouching Agentic AI — Intake + AI Review
 
-Branded intake page → 6-digit email code → file upload → Google Drive (`agentic.avai@gmail.com`) → `avatarVouching()`.
+Intake page → 6-digit email code → file upload → Google Drive (`agentic.avai@gmail.com`)
+→ **AI review: ChatGPT + Gemini in parallel → Claude final decision** → Google Docs → link emailed to the requester.
 
 ## Drive layout
 ```
 Vouching/
-└── SPN/                          ← first word of Accounting Company ("SPN Management Consultants")
-    └── CONTINENTAL/              ← first word of Customer Company
-        └── 2026-10-31_2247_AV-6BD99D/   ← one folder per submission (no overwrites)
+├── _data/
+│   └── companies.json                     ← master registry: every firm, customer, contact, submission + status
+└── SPN/                                   ← first word of Accounting Company
+    └── CONTINENTAL/                       ← first word of Customer Company
+        ├── company_profile.json           ← this customer's slice of the registry
+        └── 2026-11-02_1500_AV-6BD99D/     ← one folder per submission
             ├── Ledger_Files/
-            ├── Output_Format_Sample/    (if provided)
-            ├── Linked_Files/            (copied from the client's shared link)
-            └── submission_info.json
+            ├── Output_Format_Sample/      (if provided)
+            ├── Linked_Files/              (copied from the client's shared link)
+            ├── submission_info.json       ← raw web-form data
+            └── AI_Review/                 ← shared (view) with the requester when complete
+                ├── 01_ChatGPT_Findings_AV-6BD99D        (Google Doc)
+                ├── 02_Gemini_Findings_AV-6BD99D         (Google Doc)
+                ├── 03_Claude_Final_Decision_AV-6BD99D   (Google Doc) ← link emailed to requester
+                └── json/
+                    ├── input_manifest.json    files analysed, truncation, skipped files
+                    ├── prompt.json            refined Notes + full engineered prompt
+                    ├── chatgpt_response.json
+                    ├── gemini_response.json
+                    ├── claude_decision.json
+                    └── pipeline_result.json   status, models, timings, links
 ```
-Keys are upper-cased and a leading "The" is ignored. Rule lives in `folderKey()` in `server.js`.
 
-## 1. Google Cloud setup (reuse your existing project)
-1. console.cloud.google.com → the project you used for Raj&Raju.
-2. **APIs & Services → Library**: enable **Google Drive API** and **Gmail API**.
-3. **OAuth consent screen**: add scopes `.../auth/drive` and `.../auth/gmail.send`.
-   Set publishing status to **In production** (stay unverified — fine for your own account).
-   ⚠ In *Testing* status, refresh tokens expire after 7 days and the app will silently stop working.
-4. **Credentials → Create OAuth client ID → Desktop app**. Note the Client ID and Secret.
+## AI review stage (`lib/avatar-vouching.js`)
+| Step | What happens | File |
+|---|---|---|
+| 1 | Collect stored files; spreadsheets/CSV → text with `#row|` markers; DOCX/PDF → text; scanned PDFs + images sent natively | `lib/extract.js` |
+| 2 | Notes → structured instructions (period, threshold, sampling, focus areas, output preference) + directives | `lib/prompt-builder.js` `refineNotes()` |
+| 3 | Engineered reviewer prompt (SSA 500/530/330, Singapore GST, strict JSON schema) → **ChatGPT + Gemini in parallel** | `buildReviewerPrompt()`, `lib/llm.js` |
+| 4 | Problem + both solutions → **Claude**: verifies each finding against data, resolves disagreements, adds missed issues → final decision | `buildJudgePrompt()` |
+| 5 | Three Google Docs + JSON files in `AI_Review/` | `lib/report.js` |
+| 6 | Share `AI_Review/` with requester, email the final-decision link, update registry, notify admin | |
 
-## 2. Get the refresh token (once, on your PC)
+- Client is emailed **only** when Claude's final decision succeeded. Otherwise admin gets a "NEEDS ATTENTION" email.
+- If one reviewer fails, Claude still decides with the other. If both fail, Claude does the full review alone.
+- Jobs run one at a time; the service pings itself during a job so Render's free tier doesn't sleep mid-run.
+
+## Environment variables (new)
+| Key | Default | Notes |
+|---|---|---|
+| `OPENAI_API_KEY` / `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` | — | Missing key → that model is skipped |
+| `OPENAI_MODEL` | `gpt-5.4` | Model IDs change often — verify at `/healthz/ai` |
+| `OPENAI_REASONING_EFFORT` | `high` | `low` / `medium` / `high` |
+| `GEMINI_MODEL` | `gemini-3.1-pro-preview` | |
+| `CLAUDE_MODEL` | `claude-opus-5-5` | |
+| `MAX_AI_TEXT_CHARS` | `400000` | Text budget per prompt, split fairly across files |
+| `MAX_AI_ATTACH_MB` | `12` | Native PDFs/images (Gemini inline limit ≈ 20 MB after base64) |
+| `SHARE_RESULTS_WITH_REQUESTER` | `true` | Shares `AI_Review/` (view only) |
+| `ADMIN_TOKEN` | auto (blueprint) | For `/admin/rerun` |
+
+## Admin endpoints
+- `GET /healthz` — version + queue
+- `GET /healthz/google` — Google auth check
+- `GET /healthz/ai` — keys present + each model ID exists
+- `POST /admin/rerun` — re-run a submission's AI review:
+  ```bash
+  curl -X POST https://avatar-vouching.onrender.com/admin/rerun \
+    -H "x-admin-token: <ADMIN_TOKEN>" -H "Content-Type: application/json" \
+    -d '{"reference":"AV-6BD99D"}'
+  ```
+  Creates `AI_Review_rerun_<timestamp>/` beside the original.
+
+## Local test (no Google, no AI keys)
 ```bash
 npm install
-GOOGLE_CLIENT_ID=xxx GOOGLE_CLIENT_SECRET=yyy npm run token
+npm run dev:mock      # DEV_MODE + AI_MOCK → files in ./_dev_drive, Docs as .html, emails in console
 ```
-Open the URL, sign in as **agentic.avai@gmail.com**, click through the "unverified app" warning, approve. Copy `GOOGLE_REFRESH_TOKEN=...`.
+`npm run dev` with real AI keys set calls the real models but still writes locally.
 
-## 3. Deploy to Render
-1. Push this folder to GitHub (e.g. `Krish1959/avag-vouching`).
-2. Render → **New → Blueprint** (uses `render.yaml`) or **Web Service** (build `npm install`, start `node server.js`).
-3. Set env vars: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `SESSION_SECRET` (auto-generated by blueprint).
-4. Open `https://<service>.onrender.com/healthz` → `{"ok":true,"dev":false}`.
+## Google setup, refresh token, deploy
+Unchanged — see `/admin/connect` (`lib/connect.js`) or `get-refresh-token.js`. Scopes: `drive`, `gmail.send`.
+After deploying: **delete `package-lock.json` once** (new dependencies), push, then check `/healthz/ai`.
 
-## Local test without Google
-```bash
-npm install && npm run dev      # http://localhost:3000
-```
-Codes print in the terminal; files land in `./_dev_drive/`.
-
-## Notes
-- Email is sent through the **Gmail API**, not SMTP — Render's free tier blocks outbound SMTP ports.
-- Codes: 10-min expiry, 5 attempts, 60 s resend cooldown, rate-limited per IP. Pending codes are in memory, so a free-tier restart voids unused codes (user just clicks Resend).
-- Upload token is HMAC-signed, valid 2 h, survives restarts.
-- Per-file limit `MAX_FILE_MB` (default 100). Free tier has 512 MB RAM; uploads stream via disk, so this is safe. For bigger sets, steer clients to the shared-link option.
-- Shared link: Google Drive file/folder links are copied recursively (max `MAX_LINK_FILES`). The client must share with `agentic.avai@gmail.com` or "Anyone with the link". Non-Google links (OneDrive/Dropbox) are recorded in `submission_info.json` and the admin email for manual retrieval.
-- `lib/avatar-vouching.js` → `avatarVouching(context)` is the hook for the next stage. It receives the Drive folder id and every stored file id.
+## Pending (by decision)
+- PDPA & data confidentiality review: documents stay on Drive; OpenAI request uses `store: true` (needed for background mode); prompts contain client ledger data.

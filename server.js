@@ -1,4 +1,4 @@
-// Version :011126 11:30
+// Version :021126 14:50
 // File    :server.js
 /**
  * Avatar Vouching Agentic AI — intake service
@@ -8,7 +8,13 @@
  *   2. POST /api/verify-code    {requestId, code}                            -> returns signed upload token
  *   3. POST /api/upload         multipart: token, ledger[], sample[], driveLink, notes
  *        -> Drive: Vouching/<ACC_KEY>/<CUST_KEY>/<YYYY-MM-DD_HHMM_REF>/{Ledger_Files,Output_Format_Sample,Linked_Files}
- *        -> calls avatarVouching(context)
+ *        -> company data recorded in Vouching/_data/companies.json (+ company_profile.json per customer)
+ *        -> avatarVouching(context): ChatGPT + Gemini -> Claude final decision -> Google Docs -> email link
+ *
+ * Admin:
+ *   GET  /healthz/google   Google auth self-check
+ *   GET  /healthz/ai       AI keys + model IDs self-check
+ *   POST /admin/rerun      {reference}  header x-admin-token: <ADMIN_TOKEN>   re-runs the AI review
  */
 const express = require('express');
 const multer = require('multer');
@@ -18,12 +24,16 @@ const os = require('os');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
 const g = require('./lib/google');
-const { avatarVouching } = require('./lib/avatar-vouching');
+const llm = require('./lib/llm');
+const registry = require('./lib/registry');
+const { emailShell } = require('./lib/report');
+const vouching = require('./lib/avatar-vouching');
 
-const VERSION = '011126 11:30';
+const VERSION = '021126 14:50';
 const PORT = process.env.PORT || 3000;
 const ROOT_FOLDER = process.env.ROOT_FOLDER_NAME || 'Vouching';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'agentic.avai@gmail.com';
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || (g.DEV ? 'dev-admin' : '');
 const SECRET = process.env.SESSION_SECRET || (g.DEV ? 'dev-secret' : null);
 const MAX_FILE_MB = Number(process.env.MAX_FILE_MB || 100);
 const CODE_TTL_MS = 10 * 60 * 1000;
@@ -55,8 +65,16 @@ function folderKey(name) {
 
 const isEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(e)) && String(e).length <= 254;
 const clean = (s, max = 120) => String(s || '').replace(/[\r\n\t]/g, ' ').trim().slice(0, max);
+/** Notes keep their line breaks — they become structured prompt instructions. */
+const cleanNotes = (s, max = 2000) => String(s || '')
+  .replace(/\r\n?/g, '\n').replace(/[\t\v\f]/g, ' ').replace(/[^\S\n]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n')
+  .trim().slice(0, max);
 const hash = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const safeEqual = (a, b) => {
+  const x = Buffer.from(String(a || '')); const y = Buffer.from(String(b || ''));
+  return x.length > 0 && x.length === y.length && crypto.timingSafeEqual(x, y);
+};
 
 function sign(payload) {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -70,14 +88,6 @@ function verify(token) {
   if (sig.length !== expect.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expect))) return null;
   const p = JSON.parse(Buffer.from(body, 'base64url').toString());
   return p.exp > Date.now() ? p : null;
-}
-
-function emailShell(title, inner) {
-  return `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;border:1px solid #e8d4a8;border-radius:10px;overflow:hidden">
-  <div style="background:#3d2314;padding:18px 22px;color:#FFD700;font-size:18px;font-weight:bold">Avatar Agentic AI, Singapore<br>
-  <span style="font-size:12px;letter-spacing:3px;font-weight:normal">AVATAR VOUCHING AGENTIC AI</span></div>
-  <div style="padding:22px;color:#3a2010;font-size:14px;line-height:1.6"><h3 style="margin-top:0">${title}</h3>${inner}</div>
-  <div style="background:#2a1810;color:#b89a3a;font-size:11px;padding:10px 22px">© ${new Date().getFullYear()} Avatar Agentic AI Pte Ltd · Singapore</div></div>`;
 }
 
 /* ------------------------------------------------- step 1: request a code */
@@ -182,7 +192,7 @@ app.post('/api/upload', (req, res) => {
     const ledger = req.files?.ledger || [];
     const sample = req.files?.sample || [];
     const driveLink = clean(req.body.driveLink, 500);
-    const notes = clean(req.body.notes, 2000);
+    const notes = cleanNotes(req.body.notes);
 
     if (!ledger.length && !driveLink) {
       cleanup();
@@ -226,10 +236,13 @@ app.post('/api/upload', (req, res) => {
       }
 
       const record = {
+        schema: 'avag.vouching.submission/v1',
         reference,
         submittedAt: new Date().toISOString(),
         accountingCompany: session.accountingCompany,
         customerCompany: session.customerCompany,
+        accKey: session.accKey,
+        custKey: session.custKey,
         email: session.email,
         drivePath: `${ROOT_FOLDER}/${session.accKey}/${session.custKey}/${batchName}`,
         ledgerFiles: ledger.map((f) => ({ name: f.originalname, bytes: f.size })),
@@ -237,11 +250,14 @@ app.post('/api/upload', (req, res) => {
         driveLink: driveLink || null,
         linkCopy: linkResult,
         notes,
+        client: { ip: req.ip, userAgent: clean(req.get('user-agent'), 300) },
       };
       await g.uploadText('submission_info.json', JSON.stringify(record, null, 2), batchFolder);
       cleanup();
 
       const link = g.folderLink(batchFolder);
+      const context = { ...record, batchFolderId: batchFolder, batchFolderLink: link, customerFolderId: customerFolder, storedFiles: stored };
+
       res.json({
         ok: true,
         reference,
@@ -252,17 +268,21 @@ app.post('/api/upload', (req, res) => {
         linkFailed: linkResult ? linkResult.failed.length : 0,
       });
 
-      // Notifications + processing run after the response so the user isn't kept waiting.
+      // Registry + notifications + AI review run after the response so the user isn't kept waiting.
+      // Registry write is queued first (FIFO lock), so the AI stage always finds the submission entry.
+      registry.recordSubmission(context).catch((e) => console.error('registry write failed:', e.message));
+
       const list = (arr) => arr.map((f) => `<li>${escHtml(f.name)}</li>`).join('') || '<li>—</li>';
       g.sendMail({
         to: session.email,
         subject: `Files received — ${reference}`,
-        text: `We received your files.\nReference: ${reference}\nLedger files: ${ledger.length}\nOutput samples: ${sample.length}${driveLink ? `\nShared link: ${driveLink}` : ''}`,
+        text: `We received your files.\nReference: ${reference}\nLedger files: ${ledger.length}\nOutput samples: ${sample.length}${driveLink ? `\nShared link: ${driveLink}` : ''}\n\nOur AI review has started. You will receive a second email with the link to the results.`,
         html: emailShell(`Files received — ${reference}`,
           `<p>Thank you. Your vouching data set has been received.</p>
            <p><b>Ledger files</b></p><ul>${list(record.ledgerFiles)}</ul>
            <p><b>Output format samples</b></p><ul>${list(record.outputFormatSamples)}</ul>
            ${driveLink ? `<p><b>Shared link:</b> ${escHtml(driveLink)}</p>` : ''}
+           <p>Our AI review has started. You will receive a second email with the link to the results.</p>
            <p>Quote reference <b>${reference}</b> in any correspondence.</p>`),
       }).catch((e) => console.error('client confirmation failed:', e.message));
 
@@ -275,9 +295,7 @@ app.post('/api/upload', (req, res) => {
            <p><a href="${link}">Open Drive folder</a></p><pre style="font-size:11px;white-space:pre-wrap">${escHtml(JSON.stringify(record, null, 2))}</pre>`),
       }).catch((e) => console.error('admin notification failed:', e.message));
 
-      Promise.resolve(
-        avatarVouching({ ...record, batchFolderId: batchFolder, batchFolderLink: link, storedFiles: stored })
-      ).catch((e) => console.error('avatarVouching failed:', e.message));
+      Promise.resolve(vouching.avatarVouching(context)).catch((e) => console.error('avatarVouching failed:', e.message));
     } catch (e) {
       cleanup();
       console.error('upload failed:', e);
@@ -286,10 +304,37 @@ app.post('/api/upload', (req, res) => {
   });
 });
 
+/* ------------------------------------------------------------------ admin */
+
+app.post('/admin/rerun', rateLimit({ windowMs: 15 * 60 * 1000, max: 20 }), async (req, res) => {
+  if (!ADMIN_TOKEN || !safeEqual(req.get('x-admin-token'), ADMIN_TOKEN)) return res.status(401).json({ error: 'unauthorised' });
+  const reference = clean(req.body.reference, 20).toUpperCase();
+  try {
+    const sub = await registry.findSubmission(reference);
+    if (!sub?.batchFolderId) return res.status(404).json({ error: `No submission ${reference} in registry.` });
+    const infoId = await g.findFile('submission_info.json', sub.batchFolderId);
+    if (!infoId) return res.status(404).json({ error: 'submission_info.json not found in batch folder.' });
+    const record = JSON.parse(await g.readText(infoId));
+    const ctx = {
+      ...record,
+      accKey: record.accKey || sub.accKey,
+      custKey: record.custKey || sub.custKey,
+      batchFolderId: sub.batchFolderId,
+      batchFolderLink: sub.batchFolderLink || g.folderLink(sub.batchFolderId),
+      customerFolderId: sub.customerFolderId,
+      rerun: true,
+    };
+    res.json(await vouching.avatarVouching(ctx));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 if (!g.DEV) require('./lib/connect').mount(app);
 
-app.get('/healthz', (_req, res) => res.json({ ok: true, version: VERSION, dev: g.DEV }));
+app.get('/healthz', (_req, res) => res.json({ ok: true, version: VERSION, dev: g.DEV, vouching: vouching.status() }));
 app.get('/healthz/google', rateLimit({ windowMs: 60 * 1000, max: 10 }), async (_req, res) => res.json(await g.diagnose()));
+app.get('/healthz/ai', rateLimit({ windowMs: 60 * 1000, max: 5 }), async (_req, res) => res.json(await llm.healthcheck()));
 
 if (require.main === module) {
   app.listen(PORT, () => console.log(`AVAG.AI vouching intake v${VERSION} on :${PORT}${g.DEV ? ' (DEV_MODE)' : ''}`));

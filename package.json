@@ -1,21 +1,26 @@
 {
   "name": "avag-vouching-intake",
-  "version": "1.0.0",
-  "description": "Avatar Vouching Agentic AI \u2014 data-file intake (email verification + Google Drive storage)",
+  "version": "1.1.0",
+  "description": "Avatar Vouching Agentic AI — intake + AI review (ChatGPT + Gemini → Claude final decision)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "DEV_MODE=true node server.js",
+    "dev:mock": "DEV_MODE=true AI_MOCK=true node server.js",
     "token": "node get-refresh-token.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=18.17"
   },
   "dependencies": {
     "express": "^4.19.2",
     "express-rate-limit": "^7.4.0",
     "googleapis": "^144.0.0",
-    "multer": "^1.4.5-lts.1"
+    "mammoth": "^1.8.0",
+    "multer": "^1.4.5-lts.1",
+    "pdf-parse": "^1.1.1",
+    "undici": "^6.21.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
-  "buildVersion": "011126 11:30"
+  "buildVersion": "021126 14:50"
 }

@@ -1,4 +1,4 @@
-# Version :011126 11:30
+# Version :021126 14:50
 services:
   - type: web
     name: avag-vouching
@@ -16,7 +16,30 @@ services:
         sync: false
       - key: SESSION_SECRET
         generateValue: true
+      - key: ADMIN_TOKEN
+        generateValue: true
       - key: ADMIN_EMAIL
         value: agentic.avai@gmail.com
       - key: ROOT_FOLDER_NAME
         value: Vouching
+      # ---- AI review stage ----
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-5.4
+      - key: OPENAI_REASONING_EFFORT
+        value: high
+      - key: GEMINI_MODEL
+        value: gemini-3.1-pro-preview
+      - key: CLAUDE_MODEL
+        value: claude-opus-5-5
+      - key: MAX_AI_TEXT_CHARS
+        value: "400000"
+      - key: MAX_AI_ATTACH_MB
+        value: "12"
+      - key: SHARE_RESULTS_WITH_REQUESTER
+        value: "true"
