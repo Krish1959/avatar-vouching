@@ -1,4 +1,4 @@
-// Version :031126 13:30
+// Version :041126 00:30
 // File    :server.js
 /**
  * Avatar Vouching Agentic AI — intake service
@@ -33,7 +33,7 @@ const registry = require('./lib/registry');
 const { emailShell } = require('./lib/report');
 const vouching = require('./lib/avatar-vouching');
 
-const VERSION = '031126 13:30';
+const VERSION = '041126 00:30';
 const PORT = process.env.PORT || 3000;
 const ROOT_FOLDER = process.env.ROOT_FOLDER_NAME || 'Vouching';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'agentic.avai@gmail.com';
@@ -44,6 +44,15 @@ const CODE_TTL_MS = 10 * 60 * 1000;
 const TOKEN_TTL_MS = 2 * 60 * 60 * 1000;
 const PUBLIC_URL = (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || (g.DEV ? `http://localhost:${PORT}` : 'https://avatar-vouching.onrender.com')).replace(/\/+$/, '');
 const progressUrl = (ref) => `${PUBLIC_URL}/progress?ref=${encodeURIComponent(ref)}`;
+
+/** Results are shared via Google Drive to the verified email only — clients must know this up front. */
+const GOOGLE_NOTE_TEXT = 'IMPORTANT: Results are shared via Google Drive with this email address only. It must be linked to a Google account. Google Workspace emails already work. Microsoft 365 or other office email: link a free Google account to it at https://accounts.google.com/signup ("Use my current email address instead"). Forwarded links will not open for any other address.';
+const GOOGLE_NOTE_HTML = `<div style="background:#fff8e1;border:1px solid #e6c200;border-radius:6px;padding:10px 14px;margin:12px 0;font-size:13px">
+  <b>Important — Google account needed to open results.</b><br>
+  Results are shared via Google Drive with <b>this email address only</b>. Google Workspace emails already work.
+  Microsoft 365 or other office email? Link a free Google account to it at
+  <a href="https://accounts.google.com/signup">accounts.google.com/signup</a> (choose "Use my current email address instead").
+  Forwarded links will not open for any other address.</div>`;
 
 if (!SECRET) {
   console.error('SESSION_SECRET is not set. Refusing to start.');
@@ -132,11 +141,12 @@ app.post('/api/request-code', codeLimiter, async (req, res) => {
     await g.sendMail({
       to: email,
       subject: `Your AVAG.AI confirmation code: ${code}`,
-      text: `Your confirmation code is ${code}\n\nAccounting company: ${accountingCompany}\nCustomer company: ${customerCompany}\n\nThe code expires in 10 minutes. If you did not request it, ignore this email.`,
+      text: `Your confirmation code is ${code}\n\nAccounting company: ${accountingCompany}\nCustomer company: ${customerCompany}\n\n${GOOGLE_NOTE_TEXT}\n\nThe code expires in 10 minutes. If you did not request it, ignore this email.`,
       html: emailShell(
         'Your confirmation code',
         `<p style="font-size:32px;letter-spacing:8px;font-weight:bold;color:#3d2314;margin:10px 0">${code}</p>
          <p>Accounting company: <b>${escHtml(accountingCompany)}</b><br>Customer company: <b>${escHtml(customerCompany)}</b></p>
+         ${GOOGLE_NOTE_HTML}
          <p style="color:#6b4a35;font-size:12px">The code expires in 10 minutes. If you did not request it, ignore this email.</p>`
       ),
     });
@@ -284,13 +294,14 @@ app.post('/api/upload', (req, res) => {
       g.sendMail({
         to: session.email,
         subject: `Files received — ${reference}`,
-        text: `We received your files.\nReference: ${reference}\nLedger files: ${ledger.length}\nOutput samples: ${sample.length}${driveLink ? `\nShared link: ${driveLink}` : ''}\n\nOur AI review has started. Watch it live: ${live}\nYou will receive a second email with the link to the results.`,
+        text: `We received your files.\nReference: ${reference}\nLedger files: ${ledger.length}\nOutput samples: ${sample.length}${driveLink ? `\nShared link: ${driveLink}` : ''}\n\nOur AI review has started. Watch it live: ${live}\nYou will receive a second email with the link to the results.\n\n${GOOGLE_NOTE_TEXT}`,
         html: emailShell(`Files received — ${reference}`,
           `<p>Thank you. Your vouching data set has been received.</p>
            <p><b>Ledger files</b></p><ul>${list(record.ledgerFiles)}</ul>
            <p><b>Output format samples</b></p><ul>${list(record.outputFormatSamples)}</ul>
            ${driveLink ? `<p><b>Shared link:</b> ${escHtml(driveLink)}</p>` : ''}
            <p>Our AI review has started. You will receive a second email with the link to the results.</p>
+           ${GOOGLE_NOTE_HTML}
            <p><a href="${escHtml(live)}" style="background:#3d2314;color:#FFD700;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:bold">Watch progress live</a></p>
            <p>Quote reference <b>${reference}</b> in any correspondence.</p>`),
       }).catch((e) => console.error('client confirmation failed:', e.message));
