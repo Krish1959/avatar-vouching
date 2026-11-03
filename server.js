@@ -1,4 +1,4 @@
-// Version :031126 01:10
+// Version :031126 13:30
 // File    :server.js
 /**
  * Avatar Vouching Agentic AI — intake service
@@ -9,7 +9,7 @@
  *   3. POST /api/upload         multipart: token, ledger[], sample[], driveLink, notes
  *        -> Drive: Vouching/<ACC_KEY>/<CUST_KEY>/<YYYY-MM-DD_HHMM_REF>/{Ledger_Files,Output_Format_Sample,Linked_Files}
  *        -> company data recorded in Vouching/_data/companies.json (+ company_profile.json per customer)
- *        -> avatarVouching(context): ChatGPT + Gemini -> Claude final decision -> Google Docs -> email link
+ *        -> avatarVouching(context): ChatGPT + Gemini -> Claude final decision -> Doc + Sheet -> email links
  *
  * Live progress:
  *   GET  /progress?ref=AV-XXXXXX   3-pendulum page (public/progress.html); no ref = latest job
@@ -33,7 +33,7 @@ const registry = require('./lib/registry');
 const { emailShell } = require('./lib/report');
 const vouching = require('./lib/avatar-vouching');
 
-const VERSION = '031126 01:10';
+const VERSION = '031126 13:30';
 const PORT = process.env.PORT || 3000;
 const ROOT_FOLDER = process.env.ROOT_FOLDER_NAME || 'Vouching';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'agentic.avai@gmail.com';
