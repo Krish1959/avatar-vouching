@@ -1,4 +1,4 @@
-// Version :021126 14:50
+// Version :031126 01:10
 // File    :server.js
 /**
  * Avatar Vouching Agentic AI — intake service
@@ -10,6 +10,10 @@
  *        -> Drive: Vouching/<ACC_KEY>/<CUST_KEY>/<YYYY-MM-DD_HHMM_REF>/{Ledger_Files,Output_Format_Sample,Linked_Files}
  *        -> company data recorded in Vouching/_data/companies.json (+ company_profile.json per customer)
  *        -> avatarVouching(context): ChatGPT + Gemini -> Claude final decision -> Google Docs -> email link
+ *
+ * Live progress:
+ *   GET  /progress?ref=AV-XXXXXX   3-pendulum page (public/progress.html); no ref = latest job
+ *   GET  /api/progress/:ref        JSON timings for that page (no client data)
  *
  * Admin:
  *   GET  /healthz/google   Google auth self-check
@@ -29,7 +33,7 @@ const registry = require('./lib/registry');
 const { emailShell } = require('./lib/report');
 const vouching = require('./lib/avatar-vouching');
 
-const VERSION = '021126 14:50';
+const VERSION = '031126 01:10';
 const PORT = process.env.PORT || 3000;
 const ROOT_FOLDER = process.env.ROOT_FOLDER_NAME || 'Vouching';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'agentic.avai@gmail.com';
@@ -38,6 +42,8 @@ const SECRET = process.env.SESSION_SECRET || (g.DEV ? 'dev-secret' : null);
 const MAX_FILE_MB = Number(process.env.MAX_FILE_MB || 100);
 const CODE_TTL_MS = 10 * 60 * 1000;
 const TOKEN_TTL_MS = 2 * 60 * 60 * 1000;
+const PUBLIC_URL = (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || (g.DEV ? `http://localhost:${PORT}` : 'https://avatar-vouching.onrender.com')).replace(/\/+$/, '');
+const progressUrl = (ref) => `${PUBLIC_URL}/progress?ref=${encodeURIComponent(ref)}`;
 
 if (!SECRET) {
   console.error('SESSION_SECRET is not set. Refusing to start.');
@@ -257,6 +263,7 @@ app.post('/api/upload', (req, res) => {
 
       const link = g.folderLink(batchFolder);
       const context = { ...record, batchFolderId: batchFolder, batchFolderLink: link, customerFolderId: customerFolder, storedFiles: stored };
+      const live = progressUrl(reference);
 
       res.json({
         ok: true,
@@ -266,6 +273,7 @@ app.post('/api/upload', (req, res) => {
         sampleCount: sample.length,
         linkCopied: linkResult ? linkResult.copied.length : 0,
         linkFailed: linkResult ? linkResult.failed.length : 0,
+        progressUrl: live,
       });
 
       // Registry + notifications + AI review run after the response so the user isn't kept waiting.
@@ -276,23 +284,24 @@ app.post('/api/upload', (req, res) => {
       g.sendMail({
         to: session.email,
         subject: `Files received — ${reference}`,
-        text: `We received your files.\nReference: ${reference}\nLedger files: ${ledger.length}\nOutput samples: ${sample.length}${driveLink ? `\nShared link: ${driveLink}` : ''}\n\nOur AI review has started. You will receive a second email with the link to the results.`,
+        text: `We received your files.\nReference: ${reference}\nLedger files: ${ledger.length}\nOutput samples: ${sample.length}${driveLink ? `\nShared link: ${driveLink}` : ''}\n\nOur AI review has started. Watch it live: ${live}\nYou will receive a second email with the link to the results.`,
         html: emailShell(`Files received — ${reference}`,
           `<p>Thank you. Your vouching data set has been received.</p>
            <p><b>Ledger files</b></p><ul>${list(record.ledgerFiles)}</ul>
            <p><b>Output format samples</b></p><ul>${list(record.outputFormatSamples)}</ul>
            ${driveLink ? `<p><b>Shared link:</b> ${escHtml(driveLink)}</p>` : ''}
            <p>Our AI review has started. You will receive a second email with the link to the results.</p>
+           <p><a href="${escHtml(live)}" style="background:#3d2314;color:#FFD700;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:bold">Watch progress live</a></p>
            <p>Quote reference <b>${reference}</b> in any correspondence.</p>`),
       }).catch((e) => console.error('client confirmation failed:', e.message));
 
       g.sendMail({
         to: ADMIN_EMAIL,
         subject: `[Vouching] ${session.accKey}/${session.custKey} — ${reference}`,
-        text: `${JSON.stringify(record, null, 2)}\n\nFolder: ${link}`,
+        text: `${JSON.stringify(record, null, 2)}\n\nFolder: ${link}\nLive progress: ${live}`,
         html: emailShell(`New submission ${reference}`,
           `<p>${escHtml(session.accountingCompany)} → ${escHtml(session.customerCompany)}<br>${escHtml(session.email)}</p>
-           <p><a href="${link}">Open Drive folder</a></p><pre style="font-size:11px;white-space:pre-wrap">${escHtml(JSON.stringify(record, null, 2))}</pre>`),
+           <p><a href="${link}">Open Drive folder</a> · <a href="${escHtml(live)}">Live progress</a></p><pre style="font-size:11px;white-space:pre-wrap">${escHtml(JSON.stringify(record, null, 2))}</pre>`),
       }).catch((e) => console.error('admin notification failed:', e.message));
 
       Promise.resolve(vouching.avatarVouching(context)).catch((e) => console.error('avatarVouching failed:', e.message));
@@ -303,6 +312,20 @@ app.post('/api/upload', (req, res) => {
     }
   });
 });
+
+/* -------------------------------------------------------- live progress */
+
+app.get('/progress', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'progress.html')));
+
+const progressLimiter = rateLimit({ windowMs: 60 * 1000, max: 120, standardHeaders: true, legacyHeaders: false });
+const sendProgress = (ref, res) => {
+  const p = vouching.getProgress(ref);
+  res.set('Cache-Control', 'no-store');
+  if (!p) return res.status(404).json({ error: ref ? `No live progress for ${ref} (it may have finished before a restart).` : 'No job has run since the last restart.' });
+  res.json(p);
+};
+app.get('/api/progress', progressLimiter, (_req, res) => sendProgress(null, res));
+app.get('/api/progress/:ref', progressLimiter, (req, res) => sendProgress(clean(req.params.ref, 20).toUpperCase(), res));
 
 /* ------------------------------------------------------------------ admin */
 
@@ -324,7 +347,7 @@ app.post('/admin/rerun', rateLimit({ windowMs: 15 * 60 * 1000, max: 20 }), async
       customerFolderId: sub.customerFolderId,
       rerun: true,
     };
-    res.json(await vouching.avatarVouching(ctx));
+    res.json({ ...(await vouching.avatarVouching(ctx)), progressUrl: progressUrl(reference) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
