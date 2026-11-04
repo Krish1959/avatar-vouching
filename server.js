@@ -1,4 +1,4 @@
-// Version :041126 00:30
+// Version :041126 11:55
 // File    :server.js
 /**
  * Avatar Vouching Agentic AI — intake service
@@ -33,7 +33,7 @@ const registry = require('./lib/registry');
 const { emailShell } = require('./lib/report');
 const vouching = require('./lib/avatar-vouching');
 
-const VERSION = '041126 00:30';
+const VERSION = '041126 11:55';
 const PORT = process.env.PORT || 3000;
 const ROOT_FOLDER = process.env.ROOT_FOLDER_NAME || 'Vouching';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'agentic.avai@gmail.com';
@@ -45,14 +45,30 @@ const TOKEN_TTL_MS = 2 * 60 * 60 * 1000;
 const PUBLIC_URL = (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || (g.DEV ? `http://localhost:${PORT}` : 'https://avatar-vouching.onrender.com')).replace(/\/+$/, '');
 const progressUrl = (ref) => `${PUBLIC_URL}/progress?ref=${encodeURIComponent(ref)}`;
 
+/**
+ * ALPHA TEST MODE (temporary). ON by default.
+ *   ALPHA_PUBLIC_LINKS=false  -> back to private (verified-email-only) sharing, no code change needed.
+ *   ALPHA_PUBLIC_ROLE=writer  -> "anyone with the link" can EDIT (default: reader = view + download).
+ * When ON, the accounting-company folder and the customer folder under Vouching/ are set to
+ * "Anyone with the link"; everything inside them inherits it. Links are not searchable.
+ */
+const ALPHA_PUBLIC = process.env.ALPHA_PUBLIC_LINKS !== 'false';
+const ALPHA_ROLE = process.env.ALPHA_PUBLIC_ROLE === 'writer' ? 'writer' : 'reader';
+
 /** Results are shared via Google Drive to the verified email only — clients must know this up front. */
-const GOOGLE_NOTE_TEXT = 'IMPORTANT: Results are shared via Google Drive with this email address only. It must be linked to a Google account. Google Workspace emails already work. Microsoft 365 or other office email: link a free Google account to it at https://accounts.google.com/signup ("Use my current email address instead"). Forwarded links will not open for any other address.';
-const GOOGLE_NOTE_HTML = `<div style="background:#fff8e1;border:1px solid #e6c200;border-radius:6px;padding:10px 14px;margin:12px 0;font-size:13px">
+const PRIVATE_NOTE_TEXT = 'IMPORTANT: Results are shared via Google Drive with this email address only. It must be linked to a Google account. Google Workspace emails already work. Microsoft 365 or other office email: link a free Google account to it at https://accounts.google.com/signup ("Use my current email address instead"). Forwarded links will not open for any other address.';
+const PRIVATE_NOTE_HTML = `<div style="background:#fff8e1;border:1px solid #e6c200;border-radius:6px;padding:10px 14px;margin:12px 0;font-size:13px">
   <b>Important — Google account needed to open results.</b><br>
   Results are shared via Google Drive with <b>this email address only</b>. Google Workspace emails already work.
   Microsoft 365 or other office email? Link a free Google account to it at
   <a href="https://accounts.google.com/signup">accounts.google.com/signup</a> (choose "Use my current email address instead").
   Forwarded links will not open for any other address.</div>`;
+const ALPHA_NOTE_TEXT = 'ALPHA TEST: result links open for anyone who has them, no Google account or sign-in needed. Please do not forward the links.';
+const ALPHA_NOTE_HTML = `<div style="background:#fff8e1;border:1px solid #e6c200;border-radius:6px;padding:10px 14px;margin:12px 0;font-size:13px">
+  <b>Alpha test.</b> Result links open for anyone who has them — no Google account or sign-in needed.
+  Please do not forward the links.</div>`;
+const GOOGLE_NOTE_TEXT = ALPHA_PUBLIC ? ALPHA_NOTE_TEXT : PRIVATE_NOTE_TEXT;
+const GOOGLE_NOTE_HTML = ALPHA_PUBLIC ? ALPHA_NOTE_HTML : PRIVATE_NOTE_HTML;
 
 if (!SECRET) {
   console.error('SESSION_SECRET is not set. Refusing to start.');
@@ -225,6 +241,14 @@ app.post('/api/upload', (req, res) => {
 
     try {
       const customerFolder = await g.ensurePath([ROOT_FOLDER, session.accKey, session.custKey]);
+      if (ALPHA_PUBLIC) {
+        // ALPHA: open the accounting-company folder (e.g. ABC) and customer folder (e.g. XYZ) to anyone with the link.
+        const accFolder = await g.ensurePath([ROOT_FOLDER, session.accKey]);
+        for (const id of [accFolder, customerFolder]) {
+          const r = await g.shareWithAnyone(id, ALPHA_ROLE);
+          if (!r.ok) console.error('alpha public share failed:', r.error);
+        }
+      }
       const batchFolder = await g.createFolder(batchName, customerFolder);
 
       const stored = { ledger: [], sample: [] };
@@ -366,7 +390,7 @@ app.post('/admin/rerun', rateLimit({ windowMs: 15 * 60 * 1000, max: 20 }), async
 
 if (!g.DEV) require('./lib/connect').mount(app);
 
-app.get('/healthz', (_req, res) => res.json({ ok: true, version: VERSION, dev: g.DEV, vouching: vouching.status() }));
+app.get('/healthz', (_req, res) => res.json({ ok: true, version: VERSION, dev: g.DEV, alphaPublicLinks: ALPHA_PUBLIC ? ALPHA_ROLE : false, vouching: vouching.status() }));
 app.get('/healthz/google', rateLimit({ windowMs: 60 * 1000, max: 10 }), async (_req, res) => res.json(await g.diagnose()));
 app.get('/healthz/ai', rateLimit({ windowMs: 60 * 1000, max: 5 }), async (_req, res) => res.json(await llm.healthcheck()));
 
