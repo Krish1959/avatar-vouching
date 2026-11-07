@@ -1,8 +1,10 @@
-# Version :021126 14:50
+# Version :071126 00:25
 services:
   - type: web
     name: avag-vouching
     runtime: node
+    # Recommended for in-memory link processing at the 200 MB limit: standard (1 CPU, 2 GB).
+    # If you change the plan, set COMPUTE_RAM_MB below to match (512 / 2048 / 4096).
     plan: free
     buildCommand: npm install
     startCommand: node server.js
@@ -20,6 +22,8 @@ services:
         generateValue: true
       - key: ADMIN_EMAIL
         value: agentic.avai@gmail.com
+      - key: SUPPORT_EMAIL
+        value: admin@avag.ai
       - key: ROOT_FOLDER_NAME
         value: Vouching
       # ---- AI review stage ----
@@ -43,3 +47,17 @@ services:
         value: "12"
       - key: SHARE_RESULTS_WITH_REQUESTER
         value: "true"
+      # ---- Shared-link limits (shown on the web page) ----
+      - key: MAX_LINKS
+        value: "5"
+      - key: MAX_LINK_DEPTH
+        value: "3"
+      - key: MAX_LINK_FILES
+        value: "300"
+      - key: MAX_LINK_TOTAL_MB
+        value: "200"
+      - key: MAX_AI_FILE_MB
+        value: "60"
+      # ---- Compute guard: must match the plan's RAM ----
+      - key: COMPUTE_RAM_MB
+        value: "512"

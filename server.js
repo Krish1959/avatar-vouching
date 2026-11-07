@@ -1,4 +1,4 @@
-// Version :041126 11:55
+// Version :071126 00:25
 // File    :server.js
 /**
  * Avatar Vouching Agentic AI — intake service
@@ -6,10 +6,15 @@
  * Flow:
  *   1. POST /api/request-code   {accountingCompany, customerCompany, email}  -> emails 6-digit code
  *   2. POST /api/verify-code    {requestId, code}                            -> returns signed upload token
- *   3. POST /api/upload         multipart: token, ledger[], sample[], driveLink, notes
- *        -> Drive: Vouching/<ACC_KEY>/<CUST_KEY>/<YYYY-MM-DD_HHMM_REF>/{Ledger_Files,Output_Format_Sample,Linked_Files}
+ *   (2b) POST /api/check-links  {token, links[]}  -> per-link pre-check: files found / not examined / no access
+ *   3. POST /api/upload         multipart: token, ledger[], sample[], driveLinks[] (up to MAX_LINKS), notes
+ *        -> Drive: Vouching/<ACC_KEY>/<CUST_KEY>/<YYYY-MM-DD_HHMM_REF>/{Ledger_Files,Output_Format_Sample}
+ *        -> shared links are checked (metadata only) and recorded — their files are NEVER copied to our Drive;
+ *           the AI stage reads them live into memory and discards them after the run.
  *        -> company data recorded in Vouching/_data/companies.json (+ company_profile.json per customer)
  *        -> avatarVouching(context): ChatGPT + Gemini -> Claude final decision -> Doc + Sheet -> email links
+ *
+ *   GET /api/config  limits + supported file types, so the page always shows what the server enforces
  *
  * Live progress:
  *   GET  /progress?ref=AV-XXXXXX   3-pendulum page (public/progress.html); no ref = latest job
@@ -18,7 +23,10 @@
  * Admin:
  *   GET  /healthz/google   Google auth self-check
  *   GET  /healthz/ai       AI keys + model IDs self-check
- *   POST /admin/rerun      {reference}  header x-admin-token: <ADMIN_TOKEN>   re-runs the AI review
+ *   POST /admin/rerun      {reference, resume?}  header x-admin-token: <ADMIN_TOKEN>
+ *                          resume:true = re-run Claude only, reusing the saved ChatGPT + Gemini answers
+ *
+ * On start: recoverInterrupted() re-queues jobs that were waiting, and flags jobs cut off mid-run.
  */
 const express = require('express');
 const multer = require('multer');
@@ -32,14 +40,15 @@ const llm = require('./lib/llm');
 const registry = require('./lib/registry');
 const { emailShell } = require('./lib/report');
 const vouching = require('./lib/avatar-vouching');
+const { LIMITS, SUPPORTED_TYPES_TEXT, SUPPORT_EMAIL } = require('./lib/limits');
 
-const VERSION = '041126 11:55';
+const VERSION = '071126 00:25';
 const PORT = process.env.PORT || 3000;
 const ROOT_FOLDER = process.env.ROOT_FOLDER_NAME || 'Vouching';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'agentic.avai@gmail.com';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || (g.DEV ? 'dev-admin' : '');
 const SECRET = process.env.SESSION_SECRET || (g.DEV ? 'dev-secret' : null);
-const MAX_FILE_MB = Number(process.env.MAX_FILE_MB || 100);
+const MAX_FILE_MB = LIMITS.maxUploadFileMb;
 const CODE_TTL_MS = 10 * 60 * 1000;
 const TOKEN_TTL_MS = 2 * 60 * 60 * 1000;
 const PUBLIC_URL = (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || (g.DEV ? `http://localhost:${PORT}` : 'https://avatar-vouching.onrender.com')).replace(/\/+$/, '');
@@ -69,6 +78,9 @@ const ALPHA_NOTE_HTML = `<div style="background:#fff8e1;border:1px solid #e6c200
   Please do not forward the links.</div>`;
 const GOOGLE_NOTE_TEXT = ALPHA_PUBLIC ? ALPHA_NOTE_TEXT : PRIVATE_NOTE_TEXT;
 const GOOGLE_NOTE_HTML = ALPHA_PUBLIC ? ALPHA_NOTE_HTML : PRIVATE_NOTE_HTML;
+
+/** Data-privacy assurance for shared links — the same words appear on the page and in the emails. */
+const LINK_PRIVACY_TEXT = 'Linked folders — read-only, in transit only. Your files are read directly from your link into memory, sent over encrypted connections to our AI providers (OpenAI, Google, Anthropic) for analysis, then discarded. We never copy them to our storage. Under our paid API terms, providers do not use your data to train their models. Only your results report is saved. You may revoke your link once the run completes.';
 
 if (!SECRET) {
   console.error('SESSION_SECRET is not set. Refusing to start.');
@@ -106,6 +118,7 @@ const safeEqual = (a, b) => {
   const x = Buffer.from(String(a || '')); const y = Buffer.from(String(b || ''));
   return x.length > 0 && x.length === y.length && crypto.timingSafeEqual(x, y);
 };
+const mbText = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 
 function sign(payload) {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -120,6 +133,46 @@ function verify(token) {
   const p = JSON.parse(Buffer.from(body, 'base64url').toString());
   return p.exp > Date.now() ? p : null;
 }
+
+/**
+ * Normalises the shared links from the form: accepts driveLinks (repeated field / array) and the old
+ * single driveLink. Returns {links, error}.
+ */
+function readLinks(body) {
+  const raw = [body.driveLinks, body['driveLinks[]'], body.driveLink].flat().filter((x) => x != null);
+  const links = [...new Set(raw.map((s) => clean(s, 500)).filter(Boolean))];
+  if (links.length > LIMITS.maxLinks) return { links, error: `Up to ${LIMITS.maxLinks} shared links per submission.` };
+  for (const [i, l] of links.entries()) {
+    if (g.DEV && /^dev:/.test(l)) continue;
+    if (!/^https:\/\//i.test(l)) return { links, error: `Link ${i + 1} must start with https://` };
+    if (!g.isUsableLink(l)) return { links, error: `Link ${i + 1} is not a Google Drive link. Only Google Drive links can be read — for other storage, contact ${SUPPORT_EMAIL}.` };
+  }
+  return { links, error: null };
+}
+
+/** Metadata-only check of all links. Safe summary for the client (counts + reasons, no contents). */
+async function checkLinks(links) {
+  const inv = await g.inventoryLinks(links, vouching.linkInventoryOptions());
+  return {
+    ok: inv.links.every((l) => l.ok),
+    totals: inv.totals,
+    links: inv.links.map((l) => ({ n: l.n, ok: l.ok, error: l.error, name: l.name, kind: l.kind, files: l.files, folders: l.folders, bytes: l.bytes, size: mbText(l.bytes), notExamined: l.notExamined })),
+    notExamined: inv.notExamined,
+  };
+}
+
+/* ------------------------------------------------------------- config */
+
+app.get('/api/config', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    version: VERSION,
+    limits: LIMITS,
+    supportedTypes: SUPPORTED_TYPES_TEXT,
+    supportEmail: SUPPORT_EMAIL,
+    linkPrivacy: LINK_PRIVACY_TEXT,
+  });
+});
 
 /* ------------------------------------------------- step 1: request a code */
 
@@ -196,6 +249,21 @@ app.post('/api/verify-code', rateLimit({ windowMs: 15 * 60 * 1000, max: 30 }), (
   res.json({ token: sign({ ...entry.data, exp: Date.now() + TOKEN_TTL_MS }), ...entry.data });
 });
 
+/* ------------------------------------------- step 2b: pre-check shared links */
+
+app.post('/api/check-links', rateLimit({ windowMs: 10 * 60 * 1000, max: 30 }), async (req, res) => {
+  if (!verify(req.body.token)) return res.status(401).json({ error: 'Session expired. Please verify your email again.' });
+  const { links, error } = readLinks({ driveLinks: Array.isArray(req.body.links) ? req.body.links : [req.body.links] });
+  if (error) return res.status(400).json({ error });
+  if (!links.length) return res.status(400).json({ error: 'Paste a link first.' });
+  try {
+    res.json(await checkLinks(links));
+  } catch (e) {
+    console.error('check-links failed:', e.message);
+    res.status(502).json({ error: 'Could not check the link right now. Please try again.' });
+  }
+});
+
 /* ------------------------------------------------------ step 3: upload set */
 
 const upload = multer({
@@ -223,16 +291,33 @@ app.post('/api/upload', (req, res) => {
 
     const ledger = req.files?.ledger || [];
     const sample = req.files?.sample || [];
-    const driveLink = clean(req.body.driveLink, 500);
     const notes = cleanNotes(req.body.notes);
+    const { links, error: linkError } = readLinks(req.body);
 
-    if (!ledger.length && !driveLink) {
+    if (linkError) {
+      cleanup();
+      return res.status(400).json({ error: linkError });
+    }
+    if (!ledger.length && !links.length) {
       cleanup();
       return res.status(400).json({ error: 'Please add at least one ledger file or a shared folder link.' });
     }
-    if (driveLink && !/^https:\/\//i.test(driveLink)) {
-      cleanup();
-      return res.status(400).json({ error: 'The shared link must start with https://' });
+
+    // Pre-check links (metadata only) BEFORE anything is stored, so access problems are fixed now.
+    let linkCheck = null;
+    if (links.length) {
+      try {
+        linkCheck = await checkLinks(links);
+      } catch (e) {
+        cleanup();
+        console.error('link pre-check failed:', e.message);
+        return res.status(502).json({ error: 'Could not check your shared link(s) right now. Please try again.' });
+      }
+      const bad = linkCheck.links.filter((l) => !l.ok);
+      if (bad.length) {
+        cleanup();
+        return res.status(400).json({ error: bad.map((l) => `Link ${l.n}: ${l.error}`).join(' '), linkCheck });
+      }
     }
 
     const reference = 'AV-' + crypto.randomBytes(3).toString('hex').toUpperCase();
@@ -260,23 +345,10 @@ app.post('/api/upload', (req, res) => {
         const dir = await g.createFolder('Output_Format_Sample', batchFolder);
         for (const f of sample) stored.sample.push(await g.uploadFile(f.path, f.originalname, f.mimetype, dir));
       }
-
-      let linkResult = null;
-      if (driveLink) {
-        if (g.parseDriveId(driveLink)) {
-          const dir = await g.createFolder('Linked_Files', batchFolder);
-          try {
-            linkResult = await g.copyFromDriveLink(driveLink, dir);
-          } catch (e) {
-            linkResult = { copied: [], failed: [`Could not open link: ${e.message}`], skipped: 0 };
-          }
-        } else {
-          linkResult = { copied: [], failed: ['Non-Google link — saved for manual download.'], skipped: 0 };
-        }
-      }
+      // Shared links: NOT copied. Only the links and the metadata pre-check are recorded.
 
       const record = {
-        schema: 'avag.vouching.submission/v1',
+        schema: 'avag.vouching.submission/v2',
         reference,
         submittedAt: new Date().toISOString(),
         accountingCompany: session.accountingCompany,
@@ -287,8 +359,9 @@ app.post('/api/upload', (req, res) => {
         drivePath: `${ROOT_FOLDER}/${session.accKey}/${session.custKey}/${batchName}`,
         ledgerFiles: ledger.map((f) => ({ name: f.originalname, bytes: f.size })),
         outputFormatSamples: sample.map((f) => ({ name: f.originalname, bytes: f.size })),
-        driveLink: driveLink || null,
-        linkCopy: linkResult,
+        driveLinks: links,
+        linkHandling: links.length ? 'read-in-memory-only (never copied)' : null,
+        linkCheck: linkCheck && { checkedAt: new Date().toISOString(), totals: linkCheck.totals, links: linkCheck.links },
         notes,
         client: { ip: req.ip, userAgent: clean(req.get('user-agent'), 300) },
       };
@@ -298,6 +371,7 @@ app.post('/api/upload', (req, res) => {
       const link = g.folderLink(batchFolder);
       const context = { ...record, batchFolderId: batchFolder, batchFolderLink: link, customerFolderId: customerFolder, storedFiles: stored };
       const live = progressUrl(reference);
+      const lt = linkCheck?.totals;
 
       res.json({
         ok: true,
@@ -305,8 +379,10 @@ app.post('/api/upload', (req, res) => {
         drivePath: record.drivePath,
         ledgerCount: ledger.length,
         sampleCount: sample.length,
-        linkCopied: linkResult ? linkResult.copied.length : 0,
-        linkFailed: linkResult ? linkResult.failed.length : 0,
+        linkCount: links.length,
+        linkFiles: lt ? lt.files : 0,
+        linkFolders: lt ? lt.folders : 0,
+        linkNotExamined: lt ? lt.notExamined : 0,
         progressUrl: live,
       });
 
@@ -315,15 +391,21 @@ app.post('/api/upload', (req, res) => {
       registry.recordSubmission(context).catch((e) => console.error('registry write failed:', e.message));
 
       const list = (arr) => arr.map((f) => `<li>${escHtml(f.name)}</li>`).join('') || '<li>—</li>';
+      const linkLines = linkCheck ? linkCheck.links.map((l) => `Link ${l.n}: ${l.name} — ${l.files} file(s)${l.folders ? ` in ${l.folders} sub-folder(s)` : ''}, ${l.size}${l.notExamined ? `, ${l.notExamined} not examined` : ''}`) : [];
+      const linkBlockHtml = linkCheck ? `
+           <p><b>Shared links</b> (read in memory only — never copied to our storage)</p>
+           <ul>${linkLines.map((x) => `<li>${escHtml(x)}</li>`).join('')}</ul>
+           ${lt.notExamined ? `<p style="font-size:13px">${lt.notExamined} linked file(s) will not be examined (unsupported type or over a limit). The full list will be in your results.</p>` : ''}
+           <p style="font-size:12px;color:#6b4a35">🔒 ${escHtml(LINK_PRIVACY_TEXT)}</p>` : '';
       g.sendMail({
         to: session.email,
         subject: `Files received — ${reference}`,
-        text: `We received your files.\nReference: ${reference}\nLedger files: ${ledger.length}\nOutput samples: ${sample.length}${driveLink ? `\nShared link: ${driveLink}` : ''}\n\nOur AI review has started. Watch it live: ${live}\nYou will receive a second email with the link to the results.\n\n${GOOGLE_NOTE_TEXT}`,
+        text: `We received your files.\nReference: ${reference}\nLedger files: ${ledger.length}\nOutput samples: ${sample.length}${linkLines.length ? `\nShared links:\n  ${linkLines.join('\n  ')}\n\n${LINK_PRIVACY_TEXT}` : ''}\n\nOur AI review has started. Watch it live: ${live}\nYou will receive a second email with the link to the results.\n\n${GOOGLE_NOTE_TEXT}`,
         html: emailShell(`Files received — ${reference}`,
           `<p>Thank you. Your vouching data set has been received.</p>
            <p><b>Ledger files</b></p><ul>${list(record.ledgerFiles)}</ul>
            <p><b>Output format samples</b></p><ul>${list(record.outputFormatSamples)}</ul>
-           ${driveLink ? `<p><b>Shared link:</b> ${escHtml(driveLink)}</p>` : ''}
+           ${linkBlockHtml}
            <p>Our AI review has started. You will receive a second email with the link to the results.</p>
            ${GOOGLE_NOTE_HTML}
            <p><a href="${escHtml(live)}" style="background:#3d2314;color:#FFD700;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:bold">Watch progress live</a></p>
@@ -367,34 +449,26 @@ app.get('/api/progress/:ref', progressLimiter, (req, res) => sendProgress(clean(
 app.post('/admin/rerun', rateLimit({ windowMs: 15 * 60 * 1000, max: 20 }), async (req, res) => {
   if (!ADMIN_TOKEN || !safeEqual(req.get('x-admin-token'), ADMIN_TOKEN)) return res.status(401).json({ error: 'unauthorised' });
   const reference = clean(req.body.reference, 20).toUpperCase();
+  const resume = req.body.resume === true || req.body.resume === 'true';
   try {
-    const sub = await registry.findSubmission(reference);
-    if (!sub?.batchFolderId) return res.status(404).json({ error: `No submission ${reference} in registry.` });
-    const infoId = await g.findFile('submission_info.json', sub.batchFolderId);
-    if (!infoId) return res.status(404).json({ error: 'submission_info.json not found in batch folder.' });
-    const record = JSON.parse(await g.readText(infoId));
-    const ctx = {
-      ...record,
-      accKey: record.accKey || sub.accKey,
-      custKey: record.custKey || sub.custKey,
-      batchFolderId: sub.batchFolderId,
-      batchFolderLink: sub.batchFolderLink || g.folderLink(sub.batchFolderId),
-      customerFolderId: sub.customerFolderId,
-      rerun: true,
-    };
+    const ctx = { ...(await vouching.loadContext(reference)), rerun: true, resume };
     res.json({ ...(await vouching.avatarVouching(ctx)), progressUrl: progressUrl(reference) });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(e.status || 500).json({ error: e.message });
   }
 });
 
 if (!g.DEV) require('./lib/connect').mount(app);
 
-app.get('/healthz', (_req, res) => res.json({ ok: true, version: VERSION, dev: g.DEV, alphaPublicLinks: ALPHA_PUBLIC ? ALPHA_ROLE : false, vouching: vouching.status() }));
+app.get('/healthz', (_req, res) => res.json({ ok: true, version: VERSION, dev: g.DEV, alphaPublicLinks: ALPHA_PUBLIC ? ALPHA_ROLE : false, limits: LIMITS, vouching: vouching.status() }));
 app.get('/healthz/google', rateLimit({ windowMs: 60 * 1000, max: 10 }), async (_req, res) => res.json(await g.diagnose()));
 app.get('/healthz/ai', rateLimit({ windowMs: 60 * 1000, max: 5 }), async (_req, res) => res.json(await llm.healthcheck()));
 
 if (require.main === module) {
-  app.listen(PORT, () => console.log(`AVAG.AI vouching intake v${VERSION} on :${PORT}${g.DEV ? ' (DEV_MODE)' : ''}`));
+  app.listen(PORT, () => {
+    console.log(`AVAG.AI vouching intake v${VERSION} on :${PORT}${g.DEV ? ' (DEV_MODE)' : ''} · RAM guard ${LIMITS.computeRamMb} MB`);
+    // Give the instance a moment to settle, then pick up anything a restart cut off.
+    setTimeout(() => vouching.recoverInterrupted().catch((e) => console.error('recovery failed:', e.message)), 15e3).unref();
+  });
 }
-module.exports = { app, folderKey };
+module.exports = { app, folderKey, readLinks };
