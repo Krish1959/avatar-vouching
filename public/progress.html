@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Version :031126 01:10 -->
+<!-- Version :071126 00:25 -->
 <!-- File    :public/progress.html -->
 <html lang="en">
 <head>
@@ -23,11 +23,13 @@
   .meta > div { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
   .meta .k { font-size: .72rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
   .meta .v { font-size: 1.05rem; font-weight: 700; margin-top: 3px; font-variant-numeric: tabular-nums; }
-  #phase { text-align: center; margin: 4px 0 16px; font-weight: 600; color: var(--muted); min-height: 1.4em; }
+  #phase { text-align: center; margin: 4px 0 6px; font-weight: 600; color: var(--muted); min-height: 1.4em; }
+  #cross { text-align: center; margin: 0 0 14px; font-size: .85rem; font-weight: 700; color: var(--bad); min-height: 1em; }
 
   .stage { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
   .lane { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 8px 16px; text-align: center; position: relative; overflow: hidden; }
   .lane::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 6px; background: var(--brown); }
+  .lane.failed::before { background: var(--bad); }
   .lane svg { width: 100%; max-width: 220px; height: auto; display: block; margin: 6px auto 0; }
   .name { font-size: 1.2rem; font-weight: 800; color: var(--brown); margin-top: 4px; }
   .model { font-size: .72rem; color: var(--muted); font-family: ui-monospace, Consolas, monospace; margin-top: 2px; min-height: 1em; }
@@ -39,6 +41,7 @@
   .chip.ok { background: #dff0e3; color: var(--ok); }
   .chip.bad { background: #f6dcd8; color: var(--bad); }
   .note { font-size: .72rem; color: var(--bad); margin-top: 6px; min-height: 1em; padding: 0 6px; word-break: break-word; }
+  .note.info { color: var(--muted); }
 
   .total { margin-top: 18px; background: var(--brown); color: var(--gold); border-radius: 14px; padding: 16px; text-align: center; }
   .total .k { font-size: .75rem; letter-spacing: 3px; text-transform: uppercase; opacity: .85; }
@@ -71,6 +74,7 @@
     <div><div class="k">Start time (SGT)</div><div class="v" id="start">—</div></div>
   </div>
   <div id="phase">Connecting…</div>
+  <div id="cross"></div>
 
   <div class="stage" id="stage"></div>
 
@@ -100,11 +104,11 @@
   const PHASE_TEXT = {
     queued: 'Queued — waiting for the previous job to finish',
     preparing: 'Preparing — reading the files and building the prompt',
-    health_check: 'Health check — saying "Hi" to all three models',
+    health_check: 'Health check — saying "Hi" to the models',
     running: 'AI review in progress',
-    finishing: 'All three models done — writing the Google Docs and emails',
+    finishing: 'All models done — writing the Google Docs and emails',
     completed: 'Completed — results have been emailed',
-    needs_attention: 'Finished — needs attention (our team has been alerted)',
+    needs_attention: 'Delayed — the final decision step is paused. Our team has been alerted and you will be emailed.',
     unavailable: 'System unavailable — our team has been alerted',
     failed: 'Stopped with an error — our team has been alerted',
   };
@@ -202,15 +206,29 @@
     let txt = PHASE_TEXT[state.phase] || state.phase;
     if (state.phase === 'queued' && state.queuePosition) txt += ` (position ${state.queuePosition})`;
     $('phase').textContent = txt;
+    const cc = state.crossCheck;
+    $('cross').textContent = cc && cc.missing && cc.missing.length
+      ? `Cross-check: ${cc.used} of ${cc.of} models — ${cc.missing.join(', ')} did not complete; Claude made its own independent pass`
+      : '';
     for (const L of LANES) {
       const m = modelOf(L.key) || {};
       L.el.model.textContent = m.model || '';
       const chip = L.el.chip;
+      L.el.lane.classList.remove('failed');
+      L.el.note.className = 'note';
       if (m.endedAt) {
-        chip.textContent = m.ok ? 'Done ✓' : 'Incomplete ✗';
-        chip.className = 'chip ' + (m.ok ? 'ok' : 'bad');
+        if (m.reused) {
+          chip.textContent = m.ok ? 'Reused ✓' : 'Not available';
+          chip.className = 'chip ' + (m.ok ? 'ok' : 'bad');
+          L.el.note.className = 'note info';
+          L.el.note.textContent = 'Answer reused from the earlier run';
+        } else {
+          chip.textContent = m.ok ? 'Done ✓' : 'Failed ✗';
+          chip.className = 'chip ' + (m.ok ? 'ok' : 'bad');
+          L.el.note.textContent = m.ok ? '' : (m.note || '');
+          if (!m.ok) L.el.lane.classList.add('failed');
+        }
         L.el.bob.setAttribute('fill', m.ok ? '#7fd39a' : '#f19b8f');
-        L.el.note.textContent = m.ok ? '' : (m.note || '');
       } else if (state.startedAt && !FINAL.includes(state.phase)) {
         chip.textContent = 'Working…'; chip.className = 'chip run';
         L.el.bob.setAttribute('fill', '#FFD700'); L.el.note.textContent = '';

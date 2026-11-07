@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Version :011126 11:30  File: public/index.html -->
+<!-- Version :071126 00:25  File: public/index.html -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -76,7 +76,7 @@ body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#f0e8d8;color:
   width:100%;padding:12px 14px;border:1px solid var(--cream-dark);border-radius:8px;font:inherit;font-size:.97rem;background:var(--white);color:var(--text);transition:border .2s,box-shadow .2s}
 .field textarea{min-height:70px;resize:vertical}
 .field input:focus,.field textarea:focus{outline:none;border-color:var(--brown-light);box-shadow:0 0 0 3px var(--gold-faint)}
-.hint{font-size:.8rem;color:#7a5a45;margin-top:5px}
+.hint{font-size:.8rem;color:#7a5a45;margin-top:5px;line-height:1.5}
 .hint code{background:var(--cream);padding:1px 6px;border-radius:4px;color:var(--brown-dark);font-weight:600}
 
 .path-preview{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 14px;background:rgba(255,215,0,.08);border-left:3px solid var(--gold-dim);border-radius:0 8px 8px 0;font-size:.88rem;margin:4px 0 20px}
@@ -112,6 +112,25 @@ body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#f0e8d8;color:
 .or{display:flex;align-items:center;gap:12px;margin:22px 0 16px;color:#8a6a55;font-size:.8rem;letter-spacing:2px;text-transform:uppercase}
 .or::before,.or::after{content:'';flex:1;height:1px;background:var(--cream-dark)}
 
+/* SHARED LINKS (multi) */
+.links{display:flex;flex-direction:column;gap:10px}
+.link-row{background:var(--white);border:1px solid var(--cream-dark);border-radius:10px;padding:10px}
+.link-row .line{display:flex;gap:8px;align-items:center}
+.link-row .num{min-width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--cream-dark);color:var(--brown-dark);font-weight:700;font-size:.8rem}
+.link-row input{flex:1;min-width:0;padding:10px 12px;border:1px solid var(--cream-dark);border-radius:8px;font:inherit;font-size:.95rem;color:var(--text)}
+.link-row input:focus{outline:none;border-color:var(--brown-light);box-shadow:0 0 0 3px var(--gold-faint)}
+.mini{background:var(--cream);border:1px solid var(--cream-dark);color:var(--brown-dark);border-radius:7px;padding:8px 12px;font:inherit;font-size:.82rem;font-weight:600;cursor:pointer;white-space:nowrap}
+.mini:disabled{opacity:.5;cursor:default}
+.mini.rm{color:var(--err);background:none;border:0;font-size:1.05rem;padding:6px}
+.link-status{font-size:.82rem;margin:6px 0 0 34px;min-height:1em;line-height:1.45}
+.link-status.ok{color:var(--ok)} .link-status.err{color:var(--err)}
+.add-link{margin-top:10px;background:none;border:1px dashed var(--brown-light);color:var(--brown-dark);border-radius:8px;padding:9px 14px;font:inherit;font-size:.88rem;font-weight:600;cursor:pointer;width:100%}
+.add-link:disabled{opacity:.45;cursor:default}
+.rules{margin-top:10px;font-size:.8rem;color:#5a3a25;background:var(--cream);border-radius:8px;padding:10px 12px;line-height:1.6}
+.rules b{color:var(--brown-dark)}
+.secure{margin-top:10px;font-size:.8rem;line-height:1.55;color:#2f4a2f;background:#eef6ec;border:1px solid #c6dfc0;border-left:4px solid var(--ok);border-radius:8px;padding:10px 12px}
+.secure b{color:#1f3d1f}
+
 .progress{height:8px;background:var(--cream-dark);border-radius:6px;overflow:hidden;margin-top:14px;display:none}
 .progress div{height:100%;width:0;background:linear-gradient(90deg,var(--gold),#e0b400);transition:width .2s}
 
@@ -130,6 +149,7 @@ body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#f0e8d8;color:
 .inst-note{font-size:.8rem;color:#6b4a35;font-style:italic;padding-top:10px;margin-top:12px;border-top:1px solid rgba(0,0,0,.1);line-height:1.5}
 .reco-box{background:linear-gradient(135deg,var(--brown-dark) 0%,var(--brown-mid) 100%);border-radius:12px;padding:20px 22px;color:var(--cream)}
 .reco-box .inst-title{color:var(--gold)}
+.reco-box ul{padding-left:18px;display:flex;flex-direction:column;gap:8px}
 .reco-box li{font-size:.86rem;line-height:1.55}
 .reco-box code{color:var(--gold);font-weight:600}
 .contact{font-size:.85rem;line-height:1.7}
@@ -163,6 +183,8 @@ body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#f0e8d8;color:
   .card-body{padding:18px}
   .otp input{width:40px;height:50px;font-size:1.3rem}
   .btn{width:100%;justify-content:center}
+  .link-row .line{flex-wrap:wrap}.link-row input{flex-basis:calc(100% - 34px)}
+  .link-status{margin-left:0}
 }
 </style>
 </head>
@@ -238,8 +260,8 @@ body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#f0e8d8;color:
           <div class="drop" data-target="ledger" tabindex="0">
             <div class="ico">📊</div>
             <p>Drag &amp; drop files here, or <u>browse</u></p>
-            <small>Excel, CSV, PDF, ZIP · up to <span class="maxmb">100</span> MB each</small>
-            <input type="file" id="ledgerInput" multiple accept=".xlsx,.xls,.xlsm,.csv,.pdf,.zip,.txt,.json,.xml">
+            <small>Excel, CSV, PDF, Word, images · up to <span class="maxmb">100</span> MB each</small>
+            <input type="file" id="ledgerInput" multiple accept=".xlsx,.xls,.xlsm,.ods,.csv,.tsv,.pdf,.docx,.txt,.json,.xml,.png,.jpg,.jpeg,.webp,.gif">
           </div>
           <ul class="files" id="ledgerList"></ul>
         </div>
@@ -250,17 +272,27 @@ body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#f0e8d8;color:
             <div class="ico">📄</div>
             <p>Drag &amp; drop a sample report, or <u>browse</u></p>
             <small>Show us the layout you want the vouching output in</small>
-            <input type="file" id="sampleInput" multiple accept=".xlsx,.xls,.xlsm,.csv,.pdf,.docx,.doc">
+            <input type="file" id="sampleInput" multiple accept=".xlsx,.xls,.xlsm,.csv,.pdf,.docx">
           </div>
           <ul class="files" id="sampleList"></ul>
         </div>
+        <p class="hint" style="margin:-6px 0 4px">📎 <b>Supported file types:</b> <span id="typesText">PDF, images (PNG, JPG, WEBP, GIF), Excel (XLSX, XLS, XLSM, ODS), CSV/TSV, Word (DOCX), text (TXT, JSON, XML, HTML), Google Docs, Sheets and Slides</span>.
+          Any other file is listed in your results as <b>“Not examined”</b>.</p>
 
         <div class="or">or / also</div>
 
         <div class="field">
-          <label for="driveLink">Shared Folder Link <span class="opt">Optional — recommended for large sets</span></label>
-          <input type="url" id="driveLink" maxlength="500" placeholder="https://drive.google.com/drive/folders/…">
-          <p class="hint">Share the folder with <code>agentic.avai@gmail.com</code> (Viewer) or set “Anyone with the link”. We copy every file automatically.</p>
+          <label>Shared Folder Links <span class="opt">Optional — recommended for large sets</span></label>
+          <div class="links" id="links"></div>
+          <button type="button" class="add-link" id="addLink">+ Add another link</button>
+          <div class="rules">
+            <b>Sub-folders supported</b> (e.g. <code>/bank-statements</code>, <code>/invoices</code>). Folder names help the AI classify documents.<br>
+            <b>Limits per submission:</b> up to <span class="lim-links">5</span> links · sub-folders up to <span class="lim-depth">3</span> levels deep ·
+            <span class="lim-files">300</span> files · <span class="lim-mb">200</span> MB total · <span class="lim-filemb">60</span> MB per file.<br>
+            Share each folder with <code>agentic.avai@gmail.com</code> (Viewer) or set “Anyone with the link”. Google Drive links only.<br>
+            Files over a limit, deeper sub-folders and unsupported types are listed in your results as <b>“Not examined”</b>.
+          </div>
+          <div class="secure" id="linkPrivacy">🔒 <b>Linked folders — read-only, in transit only.</b> Your files are read directly from your link into memory, sent over encrypted connections to our AI providers (OpenAI, Google, Anthropic) for analysis, then discarded. We never copy them to our storage. Under our paid API terms, providers do not use your data to train their models. Only your results report is saved. You may revoke your link once the run completes.</div>
         </div>
 
         <div class="field">
@@ -293,19 +325,19 @@ body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#f0e8d8;color:
       <ol>
         <li>Enter the <strong>Accounting</strong> and <strong>Customer</strong> company names and your email.</li>
         <li>Enter the <strong>6-digit code</strong> we email you.</li>
-        <li>Upload <strong>ledger files</strong> and, optionally, an <strong>output format sample</strong>.</li>
-        <li>You receive a <strong>reference number</strong> by email.</li>
+        <li>Upload <strong>ledger files</strong> and/or add <strong>shared folder links</strong>, plus an optional <strong>output format sample</strong>.</li>
+        <li>You receive a <strong>reference number</strong> by email, then your results.</li>
       </ol>
-      <p class="inst-note">🔒 Files are stored privately in AVAG.AI's secure Google Drive and used only for your vouching engagement.</p>
+      <p class="inst-note">🔒 Uploaded files are stored privately in AVAG.AI's secure Google Drive and used only for your vouching engagement. Files from shared links are read in memory only and never stored.</p>
     </div>
 
     <div class="reco-box">
-      <p class="inst-title">⭐ Large data sets? Share a link</p>
+      <p class="inst-title">⭐ Large data sets? Share links</p>
       <ul>
-        <li>Put all files in one folder in <strong>your own Google Drive</strong>.</li>
-        <li>Share it with <code>agentic.avai@gmail.com</code> (Viewer).</li>
-        <li>Paste the folder link in Step 3 — we copy the whole set, sub-folders included.</li>
-        <li>OneDrive / Dropbox links are accepted and retrieved manually.</li>
+        <li>Put files in folders in <strong>your own Google Drive</strong> — sub-folders like <code>/bank-statements</code> and <code>/invoices</code> are fine.</li>
+        <li>Share each folder with <code>agentic.avai@gmail.com</code> (Viewer).</li>
+        <li>Paste up to <span class="lim-links">5</span> links in Step 3 and press <strong>Check</strong> to confirm we can see them.</li>
+        <li>We read the files in memory for the review only — nothing is copied. Revoke the share when you have your results.</li>
       </ul>
     </div>
 
@@ -340,13 +372,29 @@ body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#f0e8d8;color:
   </div>
 </div>
 
-<footer class="footer">© 2026 Avatar Agentic AI Pte Ltd · Singapore · All Rights Reserved · <a href="/privacy.html" style="color:inherit">Privacy Policy</a> · v011126 11:30</footer>
+<footer class="footer">© 2026 Avatar Agentic AI Pte Ltd · Singapore · All Rights Reserved · <a href="/privacy.html" style="color:inherit">Privacy Policy</a> · v071126 00:25</footer>
 
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
-  const MAX_MB = 100;
-  document.querySelectorAll('.maxmb').forEach((e) => (e.textContent = MAX_MB));
+  // Defaults — replaced by /api/config so the page always shows what the server enforces.
+  const CFG = { limits: { maxLinks: 5, maxLinkDepth: 3, maxLinkFiles: 300, maxLinkTotalMb: 200, maxUploadFileMb: 100, maxAiFileMb: 60 } };
+  let MAX_MB = CFG.limits.maxUploadFileMb;
+
+  function applyConfig() {
+    const L = CFG.limits;
+    MAX_MB = L.maxUploadFileMb;
+    const set = (cls, v) => document.querySelectorAll(cls).forEach((e) => (e.textContent = v));
+    set('.maxmb', L.maxUploadFileMb);
+    set('.lim-links', L.maxLinks);
+    set('.lim-depth', L.maxLinkDepth);
+    set('.lim-files', L.maxLinkFiles);
+    set('.lim-mb', L.maxLinkTotalMb);
+    set('.lim-filemb', L.maxAiFileMb);
+    if (CFG.supportedTypes) $('typesText').textContent = CFG.supportedTypes;
+    refreshLinkButtons();
+  }
+  fetch('/api/config', { cache: 'no-store' }).then((r) => r.json()).then((c) => { Object.assign(CFG, c); applyConfig(); }).catch(() => {});
 
   const state = { requestId: null, token: null, session: null, files: { ledger: [], sample: [] } };
 
@@ -473,38 +521,102 @@ body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#f0e8d8;color:
     zone.addEventListener('drop', (e) => addFiles(target, e.dataTransfer.files));
   });
 
+  /* ---------- shared links: rows, + Add, Check ---------- */
+  const linksBox = $('links');
+  const rows = () => [...linksBox.querySelectorAll('.link-row')];
+  const linkValues = () => rows().map((r) => r.querySelector('input').value.trim()).filter(Boolean);
+
+  function addLinkRow(value = '') {
+    if (rows().length >= CFG.limits.maxLinks) return;
+    const row = document.createElement('div');
+    row.className = 'link-row';
+    row.innerHTML = `<div class="line"><span class="num"></span>
+      <input type="url" maxlength="500" placeholder="https://drive.google.com/drive/folders/…" aria-label="Shared folder link">
+      <button type="button" class="mini chk">Check</button>
+      <button type="button" class="mini rm" aria-label="Remove link">✕</button></div>
+      <div class="link-status" aria-live="polite"></div>`;
+    row.querySelector('input').value = value;
+    row.querySelector('input').addEventListener('input', () => { const s = row.querySelector('.link-status'); s.textContent = ''; s.className = 'link-status'; });
+    row.querySelector('.chk').addEventListener('click', () => checkRow(row));
+    row.querySelector('.rm').addEventListener('click', () => {
+      if (rows().length === 1) { row.querySelector('input').value = ''; row.querySelector('.link-status').textContent = ''; return; }
+      row.remove(); refreshLinkButtons();
+    });
+    linksBox.appendChild(row);
+    refreshLinkButtons();
+    return row;
+  }
+  function refreshLinkButtons() {
+    rows().forEach((r, i) => (r.querySelector('.num').textContent = i + 1));
+    const full = rows().length >= CFG.limits.maxLinks;
+    $('addLink').disabled = full;
+    $('addLink').textContent = full ? `Maximum ${CFG.limits.maxLinks} links` : '+ Add another link';
+  }
+  $('addLink').addEventListener('click', () => { const r = addLinkRow(); if (r) r.querySelector('input').focus(); });
+
+  function showStatus(row, ok, html) {
+    const s = row.querySelector('.link-status');
+    s.className = 'link-status ' + (ok ? 'ok' : 'err');
+    s.innerHTML = html;
+  }
+  async function checkRow(row) {
+    const url = row.querySelector('input').value.trim();
+    if (!url) return showStatus(row, false, 'Paste a link first.');
+    const btn = row.querySelector('.chk'); btn.disabled = true; btn.textContent = 'Checking…';
+    try {
+      const d = await api('/api/check-links', { token: state.token, links: [url] });
+      const l = d.links[0];
+      if (!l.ok) showStatus(row, false, '✗ ' + esc(l.error));
+      else showStatus(row, true,
+        `✓ <b>${esc(l.name)}</b> — ${l.files} file(s)${l.folders ? ` · ${l.folders} sub-folder(s)` : ''} · ${esc(l.size)}` +
+        (l.notExamined ? ` · <span style="color:#a3271b">${l.notExamined} will not be examined</span>` : ''));
+    } catch (err) { showStatus(row, false, '✗ ' + esc(err.message)); }
+    finally { btn.disabled = false; btn.textContent = 'Check'; }
+  }
+  addLinkRow();
+
+  /* ---------- submit ---------- */
   $('uploadForm').addEventListener('submit', (e) => {
     e.preventDefault(); setMsg($('msg3'), '');
-    const link = $('driveLink').value.trim();
-    if (!state.files.ledger.length && !link) return setMsg($('msg3'), 'Add at least one ledger file, or paste a shared folder link.');
-    if (link && !/^https:\/\//i.test(link)) return setMsg($('msg3'), 'The shared link must start with https://');
+    const links = linkValues();
+    if (!state.files.ledger.length && !links.length) return setMsg($('msg3'), 'Add at least one ledger file, or paste a shared folder link.');
+    const badIdx = links.findIndex((l) => !/^https:\/\//i.test(l));
+    if (badIdx >= 0) return setMsg($('msg3'), `Link ${badIdx + 1} must start with https://`);
 
     const fd = new FormData();
     fd.append('token', state.token);
-    fd.append('driveLink', link);
+    links.forEach((l) => fd.append('driveLinks', l));
     fd.append('notes', $('notes').value.trim());
     state.files.ledger.forEach((f) => fd.append('ledger', f, f.name));
     state.files.sample.forEach((f) => fd.append('sample', f, f.name));
 
     const btn = $('uploadBtn'), bar = $('progress'), fill = bar.firstElementChild;
-    btn.disabled = true; btn.textContent = 'Uploading…'; bar.style.display = 'block'; fill.style.width = '0';
+    btn.disabled = true; btn.textContent = links.length && !state.files.ledger.length && !state.files.sample.length ? 'Checking links…' : 'Uploading…';
+    bar.style.display = 'block'; fill.style.width = '0';
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/upload');
     xhr.upload.onprogress = (ev) => {
       if (!ev.lengthComputable) return;
       const p = Math.round((ev.loaded / ev.total) * 100);
       fill.style.width = p + '%';
-      if (p === 100) btn.textContent = link ? 'Saving & copying linked files…' : 'Saving to secure storage…';
+      if (p === 100) btn.textContent = links.length ? 'Checking links & saving…' : 'Saving to secure storage…';
     };
     xhr.onload = () => {
       let d = {}; try { d = JSON.parse(xhr.responseText); } catch {}
       btn.disabled = false; btn.textContent = 'Submit'; bar.style.display = 'none';
-      if (xhr.status !== 200) return setMsg($('msg3'), d.error || 'Upload failed. Please try again.');
+      if (xhr.status !== 200) {
+        // Show per-link problems next to the right row.
+        (d.linkCheck?.links || []).forEach((l) => { const r = rows().filter((x) => x.querySelector('input').value.trim())[l.n - 1]; if (r && !l.ok) showStatus(r, false, '✗ ' + esc(l.error)); });
+        return setMsg($('msg3'), d.error || 'Upload failed. Please try again.');
+      }
       $('doneRef').textContent = d.reference;
       $('doneSummary').innerHTML =
         `${d.ledgerCount} ledger file(s) · ${d.sampleCount} output sample(s)` +
-        (link ? ` · ${d.linkCopied} file(s) copied from your link${d.linkFailed ? ` (${d.linkFailed} need follow-up)` : ''}` : '') +
-        `<br>A confirmation has been emailed to <b>${esc(state.session.email)}</b>.`;
+        (d.linkCount ? `<br>${d.linkCount} shared link(s): ${d.linkFiles} file(s) to review${d.linkFolders ? ` in ${d.linkFolders} sub-folder(s)` : ''}` +
+          (d.linkNotExamined ? ` · ${d.linkNotExamined} will be listed as “Not examined”` : '') +
+          `<br><small>🔒 Linked files are read in memory only — never copied to our storage.</small>` : '') +
+        `<br>A confirmation has been emailed to <b>${esc(state.session.email)}</b>.` +
+        (d.progressUrl ? `<br><a href="${esc(d.progressUrl)}" target="_blank" rel="noopener">Watch the AI review live</a>` : '');
       $('step3').classList.add('hidden'); $('stepDone').classList.remove('hidden');
       [1, 2, 3].forEach((i) => { $('st' + i).classList.remove('active'); $('st' + i).classList.add('done'); });
     };
@@ -514,7 +626,7 @@ body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#f0e8d8;color:
 
   $('againBtn').addEventListener('click', () => {
     state.files = { ledger: [], sample: [] }; render('ledger'); render('sample');
-    $('driveLink').value = ''; $('notes').value = '';
+    linksBox.innerHTML = ''; addLinkRow(); $('notes').value = '';
     $('stepDone').classList.add('hidden'); $('step3').classList.remove('hidden'); setStep(3);
   });
 
