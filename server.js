@@ -1,4 +1,4 @@
-// Version :071126 00:25
+// Version :111126  18:30
 // File    :server.js
 /**
  * Avatar Vouching Agentic AI — intake service
@@ -7,14 +7,16 @@
  *   1. POST /api/request-code   {accountingCompany, customerCompany, email}  -> emails 6-digit code
  *   2. POST /api/verify-code    {requestId, code}                            -> returns signed upload token
  *   (2b) POST /api/check-links  {token, links[]}  -> per-link pre-check: files found / not examined / no access
- *   3. POST /api/upload         multipart: token, ledger[], sample[], driveLinks[] (up to MAX_LINKS), notes
+ *   3. POST /api/upload         multipart: token, ledger[], sample[], driveLinks[] (up to MAX_LINKS), notes, coverage
+ *        coverage = 'full' (DEFAULT — check 100% of the data set) | 'regulation' (SSA 530 sample)   — 111126
  *        -> Drive: Vouching/<ACC_KEY>/<CUST_KEY>/<YYYY-MM-DD_HHMM_REF>/{Ledger_Files,Output_Format_Sample}
  *        -> shared links are checked (metadata only) and recorded — their files are NEVER copied to our Drive;
  *           the AI stage reads them live into memory and discards them after the run.
  *        -> company data recorded in Vouching/_data/companies.json (+ company_profile.json per customer)
  *        -> avatarVouching(context): ChatGPT + Gemini -> Claude final decision -> Doc + Sheet -> email links
+ *        Financial statements (Trial Balance / Balance Sheet) are requested in the Notes, e.g. "Create a Balance Sheet".
  *
- *   GET /api/config  limits + supported file types, so the page always shows what the server enforces
+ *   GET /api/config  limits + supported file types + review-scope options, so the page shows what the server enforces
  *
  * Live progress:
  *   GET  /progress?ref=AV-XXXXXX   3-pendulum page (public/progress.html); no ref = latest job
@@ -23,8 +25,9 @@
  * Admin:
  *   GET  /healthz/google   Google auth self-check
  *   GET  /healthz/ai       AI keys + model IDs self-check
- *   POST /admin/rerun      {reference, resume?}  header x-admin-token: <ADMIN_TOKEN>
+ *   POST /admin/rerun      {reference, resume?, coverage?}  header x-admin-token: <ADMIN_TOKEN>
  *                          resume:true = re-run Claude only, reusing the saved ChatGPT + Gemini answers
+ *                          coverage    = optional override of the stored review scope ('full' | 'regulation')
  *
  * On start: recoverInterrupted() re-queues jobs that were waiting, and flags jobs cut off mid-run.
  */
@@ -40,9 +43,10 @@ const llm = require('./lib/llm');
 const registry = require('./lib/registry');
 const { emailShell } = require('./lib/report');
 const vouching = require('./lib/avatar-vouching');
+const { COVERAGE, normCoverage, statementsRequest } = require('./lib/prompt-builder');
 const { LIMITS, SUPPORTED_TYPES_TEXT, SUPPORT_EMAIL } = require('./lib/limits');
 
-const VERSION = '071126 00:25';
+const VERSION = '111126 18:30';
 const PORT = process.env.PORT || 3000;
 const ROOT_FOLDER = process.env.ROOT_FOLDER_NAME || 'Vouching';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'agentic.avai@gmail.com';
@@ -171,6 +175,7 @@ app.get('/api/config', (_req, res) => {
     supportedTypes: SUPPORTED_TYPES_TEXT,
     supportEmail: SUPPORT_EMAIL,
     linkPrivacy: LINK_PRIVACY_TEXT,
+    coverage: { default: 'full', options: COVERAGE },
   });
 });
 
@@ -292,6 +297,8 @@ app.post('/api/upload', (req, res) => {
     const ledger = req.files?.ledger || [];
     const sample = req.files?.sample || [];
     const notes = cleanNotes(req.body.notes);
+    const coverage = normCoverage(req.body.coverage); // anything but 'regulation' → 100%
+    const statements = statementsRequest(notes);
     const { links, error: linkError } = readLinks(req.body);
 
     if (linkError) {
@@ -348,7 +355,7 @@ app.post('/api/upload', (req, res) => {
       // Shared links: NOT copied. Only the links and the metadata pre-check are recorded.
 
       const record = {
-        schema: 'avag.vouching.submission/v2',
+        schema: 'avag.vouching.submission/v3',
         reference,
         submittedAt: new Date().toISOString(),
         accountingCompany: session.accountingCompany,
@@ -363,6 +370,8 @@ app.post('/api/upload', (req, res) => {
         linkHandling: links.length ? 'read-in-memory-only (never copied)' : null,
         linkCheck: linkCheck && { checkedAt: new Date().toISOString(), totals: linkCheck.totals, links: linkCheck.links },
         notes,
+        coverage,
+        statementsRequested: statements.label,
         client: { ip: req.ip, userAgent: clean(req.get('user-agent'), 300) },
       };
       await g.uploadText('submission_info.json', JSON.stringify(record, null, 2), batchFolder);
@@ -383,6 +392,9 @@ app.post('/api/upload', (req, res) => {
         linkFiles: lt ? lt.files : 0,
         linkFolders: lt ? lt.folders : 0,
         linkNotExamined: lt ? lt.notExamined : 0,
+        coverage,
+        coverageLabel: COVERAGE[coverage].label,
+        statementsRequested: statements.label,
         progressUrl: live,
       });
 
@@ -390,6 +402,8 @@ app.post('/api/upload', (req, res) => {
       // Registry write is queued first (FIFO lock), so the AI stage always finds the submission entry.
       registry.recordSubmission(context).catch((e) => console.error('registry write failed:', e.message));
 
+      const scopeLine = `Review scope: ${COVERAGE[coverage].label}`;
+      const fsLine = `Financial statements: ${statements.requested ? `${statements.label} (requested in Notes)` : 'not requested'}`;
       const list = (arr) => arr.map((f) => `<li>${escHtml(f.name)}</li>`).join('') || '<li>—</li>';
       const linkLines = linkCheck ? linkCheck.links.map((l) => `Link ${l.n}: ${l.name} — ${l.files} file(s)${l.folders ? ` in ${l.folders} sub-folder(s)` : ''}, ${l.size}${l.notExamined ? `, ${l.notExamined} not examined` : ''}`) : [];
       const linkBlockHtml = linkCheck ? `
@@ -400,9 +414,10 @@ app.post('/api/upload', (req, res) => {
       g.sendMail({
         to: session.email,
         subject: `Files received — ${reference}`,
-        text: `We received your files.\nReference: ${reference}\nLedger files: ${ledger.length}\nOutput samples: ${sample.length}${linkLines.length ? `\nShared links:\n  ${linkLines.join('\n  ')}\n\n${LINK_PRIVACY_TEXT}` : ''}\n\nOur AI review has started. Watch it live: ${live}\nYou will receive a second email with the link to the results.\n\n${GOOGLE_NOTE_TEXT}`,
+        text: `We received your files.\nReference: ${reference}\n${scopeLine}\n${fsLine}\nLedger files: ${ledger.length}\nOutput samples: ${sample.length}${linkLines.length ? `\nShared links:\n  ${linkLines.join('\n  ')}\n\n${LINK_PRIVACY_TEXT}` : ''}\n\nOur AI review has started. Watch it live: ${live}\nYou will receive a second email with the link to the results.\n\n${GOOGLE_NOTE_TEXT}`,
         html: emailShell(`Files received — ${reference}`,
           `<p>Thank you. Your vouching data set has been received.</p>
+           <p><b>${escHtml(scopeLine)}</b><br>${escHtml(fsLine)}</p>
            <p><b>Ledger files</b></p><ul>${list(record.ledgerFiles)}</ul>
            <p><b>Output format samples</b></p><ul>${list(record.outputFormatSamples)}</ul>
            ${linkBlockHtml}
@@ -414,10 +429,11 @@ app.post('/api/upload', (req, res) => {
 
       g.sendMail({
         to: ADMIN_EMAIL,
-        subject: `[Vouching] ${session.accKey}/${session.custKey} — ${reference}`,
+        subject: `[Vouching] ${session.accKey}/${session.custKey} — ${reference} — ${coverage === 'full' ? '100%' : 'SSA 530'}${statements.requested ? ` + ${statements.label}` : ''}`,
         text: `${JSON.stringify(record, null, 2)}\n\nFolder: ${link}\nLive progress: ${live}`,
         html: emailShell(`New submission ${reference}`,
           `<p>${escHtml(session.accountingCompany)} → ${escHtml(session.customerCompany)}<br>${escHtml(session.email)}</p>
+           <p>${escHtml(scopeLine)}<br>${escHtml(fsLine)}</p>
            <p><a href="${link}">Open Drive folder</a> · <a href="${escHtml(live)}">Live progress</a></p><pre style="font-size:11px;white-space:pre-wrap">${escHtml(JSON.stringify(record, null, 2))}</pre>`),
       }).catch((e) => console.error('admin notification failed:', e.message));
 
@@ -451,8 +467,11 @@ app.post('/admin/rerun', rateLimit({ windowMs: 15 * 60 * 1000, max: 20 }), async
   const reference = clean(req.body.reference, 20).toUpperCase();
   const resume = req.body.resume === true || req.body.resume === 'true';
   try {
-    const ctx = { ...(await vouching.loadContext(reference)), rerun: true, resume };
-    res.json({ ...(await vouching.avatarVouching(ctx)), progressUrl: progressUrl(reference) });
+    const loaded = await vouching.loadContext(reference);
+    // Optional scope override, e.g. re-run an old sampled job at 100%.
+    const coverage = req.body.coverage ? normCoverage(req.body.coverage) : loaded.coverage;
+    const ctx = { ...loaded, coverage, rerun: true, resume };
+    res.json({ ...(await vouching.avatarVouching(ctx)), coverage, progressUrl: progressUrl(reference) });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
