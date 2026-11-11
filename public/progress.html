@@ -1,6 +1,8 @@
 <!doctype html>
-<!-- Version :071126 00:25 -->
+<!-- Version :111126  22:10 -->
 <!-- File    :public/progress.html -->
+<!-- 111126: ABORT button (white on red) — shown only on the requester's link (?ref=…&key=…), while the
+     review can still be stopped (queued or models running). Confirm step, then POST /api/abort. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -11,6 +13,7 @@
     --brown: #3d2314; --brown-2: #2a1810; --gold: #FFD700; --gold-soft: #e8c65a;
     --paper: #f0e8d8; --card: #fffaf0; --ink: #3a2010; --muted: #7a5a45;
     --ok: #1b7a3a; --bad: #a3271b; --line: #e3d2b0;
+    --abort: #c62828; --abort-dark: #8e1b1b;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--paper); color: var(--ink); font-family: "Segoe UI", Arial, sans-serif; }
@@ -24,12 +27,35 @@
   .meta .k { font-size: .72rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
   .meta .v { font-size: 1.05rem; font-weight: 700; margin-top: 3px; font-variant-numeric: tabular-nums; }
   #phase { text-align: center; margin: 4px 0 6px; font-weight: 600; color: var(--muted); min-height: 1.4em; }
+  #phase.stopped { color: var(--abort); }
   #cross { text-align: center; margin: 0 0 14px; font-size: .85rem; font-weight: 700; color: var(--bad); min-height: 1em; }
+
+  /* ABORT */
+  .abort-bar { text-align: center; margin: 0 0 16px; display: none; }
+  .abort-btn { background: var(--abort); color: #fff; border: 0; border-radius: 10px; padding: 12px 40px;
+               font-size: 1.05rem; font-weight: 800; letter-spacing: 3px; cursor: pointer;
+               box-shadow: 0 3px 12px rgba(198, 40, 40, .35); transition: background .15s, transform .1s; }
+  .abort-btn:hover { background: var(--abort-dark); }
+  .abort-btn:active { transform: translateY(1px); }
+  .abort-btn:disabled { opacity: .6; cursor: default; }
+  .abort-hint { font-size: .74rem; color: var(--muted); margin-top: 6px; }
+  .abort-msg { font-size: .85rem; font-weight: 700; margin-top: 8px; min-height: 1em; }
+  .abort-msg.err { color: var(--abort); } .abort-msg.ok { color: var(--ok); }
+
+  .modal { position: fixed; inset: 0; background: rgba(26, 15, 8, .6); display: none; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+  .modal.open { display: flex; }
+  .modal-box { background: #fff; border-radius: 14px; max-width: 420px; width: 100%; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.4); }
+  .modal-head { background: var(--abort); color: #fff; padding: 14px 20px; font-weight: 800; letter-spacing: 1px; }
+  .modal-body { padding: 18px 20px; font-size: .92rem; line-height: 1.55; }
+  .modal-body ul { margin: 8px 0 0 18px; padding: 0; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; padding: 0 20px 18px; }
+  .btn-keep { background: #efe3c8; color: var(--brown); border: 0; border-radius: 8px; padding: 10px 16px; font-weight: 700; cursor: pointer; }
+  .btn-stop { background: var(--abort); color: #fff; border: 0; border-radius: 8px; padding: 10px 18px; font-weight: 800; letter-spacing: 1px; cursor: pointer; }
 
   .stage { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
   .lane { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 8px 16px; text-align: center; position: relative; overflow: hidden; }
   .lane::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 6px; background: var(--brown); }
-  .lane.failed::before { background: var(--bad); }
+  .lane.failed::before, .lane.aborted::before { background: var(--abort); }
   .lane svg { width: 100%; max-width: 220px; height: auto; display: block; margin: 6px auto 0; }
   .name { font-size: 1.2rem; font-weight: 800; color: var(--brown); margin-top: 4px; }
   .model { font-size: .72rem; color: var(--muted); font-family: ui-monospace, Consolas, monospace; margin-top: 2px; min-height: 1em; }
@@ -40,6 +66,7 @@
   .chip.run { background: var(--brown); color: var(--gold); }
   .chip.ok { background: #dff0e3; color: var(--ok); }
   .chip.bad { background: #f6dcd8; color: var(--bad); }
+  .chip.stop { background: var(--abort); color: #fff; }
   .note { font-size: .72rem; color: var(--bad); margin-top: 6px; min-height: 1em; padding: 0 6px; word-break: break-word; }
   .note.info { color: var(--muted); }
 
@@ -60,6 +87,7 @@
     .model { font-size: .6rem; }
     .chip { font-size: .66rem; padding: 2px 8px; }
     .total .v { font-size: 1.5rem; }
+    .abort-btn { width: 100%; }
   }
 </style>
 </head>
@@ -76,6 +104,12 @@
   <div id="phase">Connecting…</div>
   <div id="cross"></div>
 
+  <div class="abort-bar" id="abortBar">
+    <button class="abort-btn" id="abortBtn" type="button">ABORT</button>
+    <div class="abort-hint">Stop the review now — e.g. a wrong or missing file.</div>
+    <div class="abort-msg" id="abortMsg" role="status"></div>
+  </div>
+
   <div class="stage" id="stage"></div>
 
   <div class="total">
@@ -89,8 +123,27 @@
     <button id="go">Show</button>
   </div>
 
-  <footer>© Avatar Agentic AI Pte Ltd · AVAG.AI · Times shown are from the start of the AI review.</footer>
+  <footer>© Avatar Agentic AI Pte Ltd · AVAG.AI · Times shown are from the start of the AI review. · v111126 22:10</footer>
 </main>
+
+<div class="modal" id="abortModal" role="dialog" aria-modal="true" aria-labelledby="abortTitle">
+  <div class="modal-box">
+    <div class="modal-head" id="abortTitle">Stop this review?</div>
+    <div class="modal-body">
+      <b>Reference <span id="abortRef"></span></b>
+      <ul>
+        <li>The AI models are told to stop immediately.</li>
+        <li>No results will be produced for this run.</li>
+        <li>Work already done by the models up to now is still counted.</li>
+        <li>This cannot be undone — to run again, submit your files again.</li>
+      </ul>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-keep" id="abortCancel" type="button">Keep running</button>
+      <button class="btn-stop" id="abortConfirm" type="button">ABORT NOW</button>
+    </div>
+  </div>
+</div>
 
 <script>
 (() => {
@@ -100,25 +153,29 @@
     { key: 'Claude',  name: 'Claude', period: 1.80 },
   ];
   const AMP = 32;            // swing amplitude, degrees
-  const FINAL = ['completed', 'needs_attention', 'unavailable', 'failed'];
+  const FINAL = ['completed', 'needs_attention', 'unavailable', 'failed', 'aborted'];
   const PHASE_TEXT = {
     queued: 'Queued — waiting for the previous job to finish',
     preparing: 'Preparing — reading the files and building the prompt',
     health_check: 'Health check — saying "Hi" to the models',
     running: 'AI review in progress',
+    aborting: 'Stopping — telling the AI models to stop…',
     finishing: 'All models done — writing the Google Docs and emails',
     completed: 'Completed — results have been emailed',
     needs_attention: 'Delayed — the final decision step is paused. Our team has been alerted and you will be emailed.',
     unavailable: 'System unavailable — our team has been alerted',
     failed: 'Stopped with an error — our team has been alerted',
+    aborted: 'Stopped on request — no results were produced. A confirmation has been emailed.',
   };
 
   const $ = (id) => document.getElementById(id);
   const params = new URLSearchParams(location.search);
   let ref = (params.get('ref') || '').trim().toUpperCase();
+  const key = (params.get('key') || '').trim();   // ABORT key — only in the requester's own link
   let state = null;          // last JSON from the server
   let offset = 0;            // serverNow - local now
   let pollTimer = null;
+  let abortSent = false;
 
   // ---- build the three lanes
   const stage = $('stage');
@@ -158,7 +215,7 @@
       hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
   }
   const now = () => Date.now() + offset;
-  const modelOf = (key) => state?.models?.find((m) => m.key === key || m.label === key);
+  const modelOf = (k) => state?.models?.find((m) => m.key === k || m.label === k);
 
   // ---- data
   async function poll() {
@@ -173,7 +230,7 @@
       }
       offset = j.serverNow - (t0 + Date.now()) / 2;
       state = j;
-      if (!ref) { ref = j.reference; history.replaceState(null, '', `?ref=${encodeURIComponent(ref)}`); }
+      if (!ref) { ref = j.reference; history.replaceState(null, '', `?ref=${encodeURIComponent(ref)}${key ? `&key=${encodeURIComponent(key)}` : ''}`); }
       $('ask').style.display = 'none';
       render();
       if (!FINAL.includes(j.phase)) schedule(1500);
@@ -199,24 +256,62 @@
   };
   $('refInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('go').click(); });
 
+  // ---- ABORT
+  const setAbortMsg = (t, ok) => { $('abortMsg').textContent = t || ''; $('abortMsg').className = 'abort-msg ' + (ok ? 'ok' : 'err'); };
+  $('abortBtn').onclick = () => { $('abortRef').textContent = ref; $('abortModal').classList.add('open'); $('abortConfirm').focus(); };
+  $('abortCancel').onclick = () => $('abortModal').classList.remove('open');
+  $('abortModal').addEventListener('click', (e) => { if (e.target.id === 'abortModal') $('abortModal').classList.remove('open'); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('abortModal').classList.remove('open'); });
+  $('abortConfirm').onclick = async () => {
+    $('abortModal').classList.remove('open');
+    const btn = $('abortBtn');
+    btn.disabled = true; btn.textContent = 'STOPPING…';
+    try {
+      const r = await fetch('/api/abort', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reference: ref, key }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) { setAbortMsg(j.error || 'Could not stop the review.'); btn.disabled = false; btn.textContent = 'ABORT'; return; }
+      abortSent = true;
+      setAbortMsg(j.message || 'Stopping…', true);
+      schedule(300);
+    } catch {
+      setAbortMsg('Network error — please try again.');
+      btn.disabled = false; btn.textContent = 'ABORT';
+    }
+  };
+
   // ---- static parts (on every poll)
   function render() {
     $('ref').textContent = state.reference;
     $('start').textContent = state.startedAt ? sgt(state.startedAt) : '—';
     let txt = PHASE_TEXT[state.phase] || state.phase;
     if (state.phase === 'queued' && state.queuePosition) txt += ` (position ${state.queuePosition})`;
+    if (state.phase === 'completed' && state.abortedAt) txt = 'Completed — the abort arrived after all models had finished, so the results were kept and emailed';
     $('phase').textContent = txt;
+    $('phase').className = ['aborting', 'aborted'].includes(state.phase) ? 'stopped' : '';
     const cc = state.crossCheck;
     $('cross').textContent = cc && cc.missing && cc.missing.length
       ? `Cross-check: ${cc.used} of ${cc.of} models — ${cc.missing.join(', ')} did not complete; Claude made its own independent pass`
       : '';
+
+    // ABORT button: requester's link only, while there is still something to stop.
+    const showAbort = !!key && !!state.abortable && !FINAL.includes(state.phase) && state.phase !== 'aborting';
+    $('abortBar').style.display = showAbort || (abortSent && $('abortMsg').textContent) ? 'block' : 'none';
+    $('abortBtn').style.display = showAbort ? '' : 'none';
+    if (!showAbort && state.phase === 'aborted') setAbortMsg('Review stopped. A confirmation has been emailed.', true);
+
     for (const L of LANES) {
       const m = modelOf(L.key) || {};
       L.el.model.textContent = m.model || '';
       const chip = L.el.chip;
-      L.el.lane.classList.remove('failed');
+      L.el.lane.classList.remove('failed', 'aborted');
       L.el.note.className = 'note';
-      if (m.endedAt) {
+      if (m.aborted) {
+        chip.textContent = 'Aborted ■'; chip.className = 'chip stop';
+        L.el.lane.classList.add('aborted');
+        L.el.bob.setAttribute('fill', '#e57373');
+        L.el.note.className = 'note info';
+        L.el.note.textContent = 'Stopped by user';
+      } else if (m.endedAt) {
         if (m.reused) {
           chip.textContent = m.ok ? 'Reused ✓' : 'Not available';
           chip.className = 'chip ' + (m.ok ? 'ok' : 'bad');
@@ -229,6 +324,9 @@
           if (!m.ok) L.el.lane.classList.add('failed');
         }
         L.el.bob.setAttribute('fill', m.ok ? '#7fd39a' : '#f19b8f');
+      } else if (state.phase === 'aborting') {
+        chip.textContent = 'Stopping…'; chip.className = 'chip stop';
+        L.el.note.textContent = '';
       } else if (state.startedAt && !FINAL.includes(state.phase)) {
         chip.textContent = 'Working…'; chip.className = 'chip run';
         L.el.bob.setAttribute('fill', '#FFD700'); L.el.note.textContent = '';
@@ -247,7 +345,7 @@
     let latestEnd = 0, allEnded = !!state?.startedAt;
     for (const L of LANES) {
       const m = modelOf(L.key) || {};
-      const running = !!(state?.startedAt && !m.endedAt && !FINAL.includes(state.phase));
+      const running = !!(state?.startedAt && !m.endedAt && !FINAL.includes(state.phase) && state.phase !== 'aborting');
       // amplitude eases toward its target so the pendulum glides to a stop
       const target = running ? AMP : 0;
       L.amp += (target - L.amp) * Math.min(1, dt * (running ? 1.6 : 0.9));
