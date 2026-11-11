@@ -1,4 +1,4 @@
-// Version :111126  18:30
+// Version :111126  22:10
 // File    :server.js
 /**
  * Avatar Vouching Agentic AI — intake service
@@ -21,6 +21,8 @@
  * Live progress:
  *   GET  /progress?ref=AV-XXXXXX   3-pendulum page (public/progress.html); no ref = latest job
  *   GET  /api/progress/:ref        JSON timings for that page (no client data)
+ *   POST /api/abort {reference, key}  ABORT button (111126). key = private abort key, only in the requester's
+ *                                     progress link (upload response + confirmation email). Stops every model.
  *
  * Admin:
  *   GET  /healthz/google   Google auth self-check
@@ -28,6 +30,7 @@
  *   POST /admin/rerun      {reference, resume?, coverage?}  header x-admin-token: <ADMIN_TOKEN>
  *                          resume:true = re-run Claude only, reusing the saved ChatGPT + Gemini answers
  *                          coverage    = optional override of the stored review scope ('full' | 'regulation')
+ *   POST /admin/abort      {reference}  header x-admin-token — stop a queued or running review
  *
  * On start: recoverInterrupted() re-queues jobs that were waiting, and flags jobs cut off mid-run.
  */
@@ -46,7 +49,7 @@ const vouching = require('./lib/avatar-vouching');
 const { COVERAGE, normCoverage, statementsRequest } = require('./lib/prompt-builder');
 const { LIMITS, SUPPORTED_TYPES_TEXT, SUPPORT_EMAIL } = require('./lib/limits');
 
-const VERSION = '111126 18:30';
+const VERSION = '111126 22:10';
 const PORT = process.env.PORT || 3000;
 const ROOT_FOLDER = process.env.ROOT_FOLDER_NAME || 'Vouching';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'agentic.avai@gmail.com';
@@ -56,7 +59,10 @@ const MAX_FILE_MB = LIMITS.maxUploadFileMb;
 const CODE_TTL_MS = 10 * 60 * 1000;
 const TOKEN_TTL_MS = 2 * 60 * 60 * 1000;
 const PUBLIC_URL = (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || (g.DEV ? `http://localhost:${PORT}` : 'https://avatar-vouching.onrender.com')).replace(/\/+$/, '');
-const progressUrl = (ref) => `${PUBLIC_URL}/progress?ref=${encodeURIComponent(ref)}`;
+/** Private abort key for one reference — derived from SESSION_SECRET, so nothing needs storing. */
+const abortKey = (ref) => require('crypto').createHmac('sha256', SECRET || 'unset').update(`abort:${String(ref).toUpperCase()}`).digest('base64url').slice(0, 24);
+/** Public progress link (watch only), or the requester's link with the ABORT key. */
+const progressUrl = (ref, withKey = false) => `${PUBLIC_URL}/progress?ref=${encodeURIComponent(ref)}${withKey ? `&key=${abortKey(ref)}` : ''}`;
 
 /**
  * ALPHA TEST MODE (temporary). ON by default.
@@ -379,7 +385,7 @@ app.post('/api/upload', (req, res) => {
 
       const link = g.folderLink(batchFolder);
       const context = { ...record, batchFolderId: batchFolder, batchFolderLink: link, customerFolderId: customerFolder, storedFiles: stored };
-      const live = progressUrl(reference);
+      const live = progressUrl(reference, true); // requester's link — carries the ABORT key
       const lt = linkCheck?.totals;
 
       res.json({
@@ -414,7 +420,7 @@ app.post('/api/upload', (req, res) => {
       g.sendMail({
         to: session.email,
         subject: `Files received — ${reference}`,
-        text: `We received your files.\nReference: ${reference}\n${scopeLine}\n${fsLine}\nLedger files: ${ledger.length}\nOutput samples: ${sample.length}${linkLines.length ? `\nShared links:\n  ${linkLines.join('\n  ')}\n\n${LINK_PRIVACY_TEXT}` : ''}\n\nOur AI review has started. Watch it live: ${live}\nYou will receive a second email with the link to the results.\n\n${GOOGLE_NOTE_TEXT}`,
+        text: `We received your files.\nReference: ${reference}\n${scopeLine}\n${fsLine}\nLedger files: ${ledger.length}\nOutput samples: ${sample.length}${linkLines.length ? `\nShared links:\n  ${linkLines.join('\n  ')}\n\n${LINK_PRIVACY_TEXT}` : ''}\n\nOur AI review has started. Watch it live: ${live}\nNeed to stop it (wrong file, missing data)? Open that link and press ABORT. Keep the link private.\nYou will receive a second email with the link to the results.\n\n${GOOGLE_NOTE_TEXT}`,
         html: emailShell(`Files received — ${reference}`,
           `<p>Thank you. Your vouching data set has been received.</p>
            <p><b>${escHtml(scopeLine)}</b><br>${escHtml(fsLine)}</p>
@@ -424,6 +430,7 @@ app.post('/api/upload', (req, res) => {
            <p>Our AI review has started. You will receive a second email with the link to the results.</p>
            ${GOOGLE_NOTE_HTML}
            <p><a href="${escHtml(live)}" style="background:#3d2314;color:#FFD700;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:bold">Watch progress live</a></p>
+           <p style="font-size:13px">Need to stop the review (wrong file, missing data)? Open this link and press <b style="color:#c62828">ABORT</b>. Keep the link private — it can stop your review.</p>
            <p>Quote reference <b>${reference}</b> in any correspondence.</p>`),
       }).catch((e) => console.error('client confirmation failed:', e.message));
 
@@ -460,7 +467,25 @@ const sendProgress = (ref, res) => {
 app.get('/api/progress', progressLimiter, (_req, res) => sendProgress(null, res));
 app.get('/api/progress/:ref', progressLimiter, (req, res) => sendProgress(clean(req.params.ref, 20).toUpperCase(), res));
 
+/* ------------------------------------------------------------------ abort */
+
+app.post('/api/abort', rateLimit({ windowMs: 10 * 60 * 1000, max: 20 }), (req, res) => {
+  const reference = clean(req.body.reference, 20).toUpperCase();
+  if (!reference || !safeEqual(req.body.key, abortKey(reference))) {
+    return res.status(403).json({ error: 'This link cannot stop the review. Use the link from your confirmation email.' });
+  }
+  const r = vouching.abort(reference, 'client');
+  res.status(r.ok ? 200 : 409).json(r);
+});
+
 /* ------------------------------------------------------------------ admin */
+
+app.post('/admin/abort', rateLimit({ windowMs: 15 * 60 * 1000, max: 30 }), (req, res) => {
+  if (!ADMIN_TOKEN || !safeEqual(req.get('x-admin-token'), ADMIN_TOKEN)) return res.status(401).json({ error: 'unauthorised' });
+  const r = vouching.abort(clean(req.body.reference, 20).toUpperCase(), 'admin');
+  res.status(r.ok ? 200 : 409).json(r);
+});
+
 
 app.post('/admin/rerun', rateLimit({ windowMs: 15 * 60 * 1000, max: 20 }), async (req, res) => {
   if (!ADMIN_TOKEN || !safeEqual(req.get('x-admin-token'), ADMIN_TOKEN)) return res.status(401).json({ error: 'unauthorised' });
@@ -471,7 +496,7 @@ app.post('/admin/rerun', rateLimit({ windowMs: 15 * 60 * 1000, max: 20 }), async
     // Optional scope override, e.g. re-run an old sampled job at 100%.
     const coverage = req.body.coverage ? normCoverage(req.body.coverage) : loaded.coverage;
     const ctx = { ...loaded, coverage, rerun: true, resume };
-    res.json({ ...(await vouching.avatarVouching(ctx)), coverage, progressUrl: progressUrl(reference) });
+    res.json({ ...(await vouching.avatarVouching(ctx)), coverage, progressUrl: progressUrl(reference, true) });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
