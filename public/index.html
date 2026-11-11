@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Version :071126 00:25  File: public/index.html -->
+<!-- Version :111126  18:30  File: public/index.html -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -78,6 +78,18 @@ body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#f0e8d8;color:
 .field input:focus,.field textarea:focus{outline:none;border-color:var(--brown-light);box-shadow:0 0 0 3px var(--gold-faint)}
 .hint{font-size:.8rem;color:#7a5a45;margin-top:5px;line-height:1.5}
 .hint code{background:var(--cream);padding:1px 6px;border-radius:4px;color:var(--brown-dark);font-weight:600}
+
+/* REVIEW SCOPE (111126) */
+.scope{display:flex;flex-direction:column;gap:10px}
+.field label.scope-opt{display:flex;gap:12px;align-items:flex-start;margin:0;font-weight:400;background:var(--white);border:1px solid var(--cream-dark);border-radius:10px;padding:12px 14px;cursor:pointer;transition:border-color .2s,box-shadow .2s}
+.field label.scope-opt:hover{border-color:var(--gold)}
+.field label.scope-opt.on{border-color:var(--brown-light);box-shadow:0 0 0 3px var(--gold-faint);background:#fffbef}
+.scope-opt input{margin-top:3px;width:18px;height:18px;flex-shrink:0;accent-color:var(--brown-dark);cursor:pointer}
+.scope-opt b{color:var(--brown-dark);font-size:.95rem}
+.scope-opt .tag{display:inline-block;margin-left:6px;background:var(--gold);color:var(--brown-dark);font-size:.62rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:2px 8px;border-radius:12px;vertical-align:middle}
+.scope-opt small{display:block;color:#7a5a45;font-size:.8rem;line-height:1.5;margin-top:3px}
+.fs-hint{margin-top:8px;font-size:.8rem;line-height:1.55;color:#5a3a25;background:var(--cream);border-left:3px solid var(--gold-dim);border-radius:0 8px 8px 0;padding:8px 12px}
+.fs-hint b{color:var(--brown-dark)}
 
 .path-preview{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 14px;background:rgba(255,215,0,.08);border-left:3px solid var(--gold-dim);border-radius:0 8px 8px 0;font-size:.88rem;margin:4px 0 20px}
 .path-preview .seg{background:var(--white);border:1px solid var(--cream-dark);padding:2px 8px;border-radius:5px;font-weight:600;color:var(--brown-dark)}
@@ -297,7 +309,26 @@ body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#f0e8d8;color:
 
         <div class="field">
           <label for="notes">Notes <span class="opt">Optional</span></label>
-          <textarea id="notes" maxlength="2000" placeholder="Financial year, materiality, special instructions…"></textarea>
+          <textarea id="notes" maxlength="2000" placeholder="Financial year, materiality, special instructions… e.g. Create a Balance Sheet"></textarea>
+          <p class="fs-hint">📑 <b>Need a Trial Balance or Balance Sheet?</b> Write it here, e.g. <b>“Create a Balance Sheet”</b> or <b>“Prepare a Trial Balance”</b>.
+            Leave it out and none is produced. If your files are not enough for a proper statement, your results will list exactly what to add — then re-run the vouching in full.</p>
+        </div>
+
+        <!-- REVIEW SCOPE (111126) — default: 100% of the data set -->
+        <div class="field">
+          <label>Review Scope</label>
+          <div class="scope" role="radiogroup" aria-label="Review scope">
+            <label class="scope-opt on">
+              <input type="radio" name="coverage" value="full" checked>
+              <span><b>Check on 100% Dataset</b><span class="tag">Default</span>
+                <small>Every ledger line is tested and listed in your working paper — audit every transaction, not just a sample.</small></span>
+            </label>
+            <label class="scope-opt">
+              <input type="radio" name="coverage" value="regulation">
+              <span><b>Check as per Audit Regulations</b>
+                <small>Documented sample under <b>SSA 530 Audit Sampling</b>, with SSA 500 Audit Evidence and SSA 330 (Singapore Standards on Auditing): all key items above materiality, risk-based items and a selection of the rest.</small></span>
+            </label>
+          </div>
         </div>
 
         <button class="btn" type="submit" id="uploadBtn">Submit</button>
@@ -326,6 +357,7 @@ body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#f0e8d8;color:
         <li>Enter the <strong>Accounting</strong> and <strong>Customer</strong> company names and your email.</li>
         <li>Enter the <strong>6-digit code</strong> we email you.</li>
         <li>Upload <strong>ledger files</strong> and/or add <strong>shared folder links</strong>, plus an optional <strong>output format sample</strong>.</li>
+        <li>Choose the <strong>review scope</strong> — <strong>100% of the data set</strong> (default) or sampling per audit regulations.</li>
         <li>You receive a <strong>reference number</strong> by email, then your results.</li>
       </ol>
       <p class="inst-note">🔒 Uploaded files are stored privately in AVAG.AI's secure Google Drive and used only for your vouching engagement. Files from shared links are read in memory only and never stored.</p>
@@ -372,7 +404,7 @@ body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#f0e8d8;color:
   </div>
 </div>
 
-<footer class="footer">© 2026 Avatar Agentic AI Pte Ltd · Singapore · All Rights Reserved · <a href="/privacy.html" style="color:inherit">Privacy Policy</a> · v071126 00:25</footer>
+<footer class="footer">© 2026 Avatar Agentic AI Pte Ltd · Singapore · All Rights Reserved · <a href="/privacy.html" style="color:inherit">Privacy Policy</a> · v111126 18:30</footer>
 
 <script>
 (() => {
@@ -418,6 +450,13 @@ body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#f0e8d8;color:
     if (!r.ok) throw new Error(data.error || 'Something went wrong.');
     return data;
   }
+
+  /* ---------- review scope radio (default 100%) ---------- */
+  const scopeInputs = [...document.querySelectorAll('input[name="coverage"]')];
+  const paintScope = () => scopeInputs.forEach((i) => i.closest('.scope-opt').classList.toggle('on', i.checked));
+  scopeInputs.forEach((i) => i.addEventListener('change', paintScope));
+  const scopeValue = () => (scopeInputs.find((i) => i.checked)?.value === 'regulation' ? 'regulation' : 'full');
+  const resetScope = () => { scopeInputs.forEach((i) => (i.checked = i.value === 'full')); paintScope(); };
 
   /* ---------- STEP 1 ---------- */
   let resendTimer;
@@ -587,6 +626,7 @@ body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#f0e8d8;color:
     fd.append('token', state.token);
     links.forEach((l) => fd.append('driveLinks', l));
     fd.append('notes', $('notes').value.trim());
+    fd.append('coverage', scopeValue());
     state.files.ledger.forEach((f) => fd.append('ledger', f, f.name));
     state.files.sample.forEach((f) => fd.append('sample', f, f.name));
 
@@ -615,6 +655,8 @@ body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#f0e8d8;color:
         (d.linkCount ? `<br>${d.linkCount} shared link(s): ${d.linkFiles} file(s) to review${d.linkFolders ? ` in ${d.linkFolders} sub-folder(s)` : ''}` +
           (d.linkNotExamined ? ` · ${d.linkNotExamined} will be listed as “Not examined”` : '') +
           `<br><small>🔒 Linked files are read in memory only — never copied to our storage.</small>` : '') +
+        `<br><b>Review scope:</b> ${esc(d.coverageLabel || (d.coverage === 'regulation' ? 'Audit regulations (SSA 530)' : '100% of data set'))}` +
+        (d.statementsRequested && d.statementsRequested !== 'Not requested' ? `<br><b>Financial statements:</b> ${esc(d.statementsRequested)}` : '') +
         `<br>A confirmation has been emailed to <b>${esc(state.session.email)}</b>.` +
         (d.progressUrl ? `<br><a href="${esc(d.progressUrl)}" target="_blank" rel="noopener">Watch the AI review live</a>` : '');
       $('step3').classList.add('hidden'); $('stepDone').classList.remove('hidden');
@@ -626,7 +668,7 @@ body{font-family:'DM Sans',sans-serif;min-height:100vh;background:#f0e8d8;color:
 
   $('againBtn').addEventListener('click', () => {
     state.files = { ledger: [], sample: [] }; render('ledger'); render('sample');
-    linksBox.innerHTML = ''; addLinkRow(); $('notes').value = '';
+    linksBox.innerHTML = ''; addLinkRow(); $('notes').value = ''; resetScope();
     $('stepDone').classList.add('hidden'); $('step3').classList.remove('hidden'); setStep(3);
   });
 
